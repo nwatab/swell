@@ -8,7 +8,7 @@ const scheduleNote = (
   note: Note,
   songStartTime: number,
   bps: number
-): void => {
+): OscillatorNode => {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
 
@@ -32,16 +32,18 @@ const scheduleNote = (
 
   osc.start(t0);
   osc.stop(t0 + dur + 0.1);
+
+  return osc;
 };
 
 export const playSong = (
   ctx: AudioContext,
   song: Song
-): { startedAt: number; bps: number } => {
+): (() => void) => {
   const bps = song.bpm / 60;
   const startedAt = ctx.currentTime + 0.05;
 
-  song.notes.forEach(note => scheduleNote(ctx, note, startedAt, bps));
+  const oscs = song.notes.map(note => scheduleNote(ctx, note, startedAt, bps));
 
-  return { startedAt, bps };
+  return () => oscs.forEach(osc => { try { osc.stop(); } catch { /* already stopped */ } });
 };
