@@ -48,10 +48,21 @@ const downloadSwell = (song: Song) => {
   URL.revokeObjectURL(url);
 };
 
+// ── Snap helpers ─────────────────────────────────────────────────────────────
+type SnapDiv = '1/4' | '1/8' | '1/16';
+
+const toResolution = (div: SnapDiv, triplet: boolean): number => {
+  const base = div === '1/4' ? 1 : div === '1/8' ? 0.5 : 0.25;
+  return triplet ? (base * 2) / 3 : base;
+};
+
+const snapBeat = (rawBeat: number, resolution: number): number =>
+  Math.round(rawBeat / resolution) * resolution;
+
 // ── Song state helpers ───────────────────────────────────────────────────────
-const addNote = (song: Song, pitch: number, startBeat: number): Song => ({
+const addNote = (song: Song, pitch: number, startBeat: number, durationBeats = 1): Song => ({
   ...song,
-  notes: [...song.notes, { id: genId(), pitch, startBeat, durationBeats: 1, velocity: 100 }],
+  notes: [...song.notes, { id: genId(), pitch, startBeat, durationBeats, velocity: 100 }],
 });
 
 const removeNote = (song: Song, id: string): Song => ({
@@ -198,6 +209,10 @@ function TransportBar({
   musicGenActive,
   onExport,
   onImport,
+  snapDiv,
+  triplet,
+  onSnapDivChange,
+  onTripletToggle,
 }: {
   playing: boolean;
   beat: number;
@@ -208,6 +223,10 @@ function TransportBar({
   musicGenActive: boolean;
   onExport: () => void;
   onImport: (song: Song) => void;
+  snapDiv: SnapDiv;
+  triplet: boolean;
+  onSnapDivChange: (div: SnapDiv) => void;
+  onTripletToggle: () => void;
 }) {
   const measure = Math.floor(beat / 4) + 1;
   const beatInMeasure = Math.floor(beat % 4) + 1;
@@ -271,6 +290,32 @@ function TransportBar({
           className="hidden"
           onChange={handleFileChange}
         />
+      </div>
+      <div className="flex items-center gap-1">
+        {(['1/4', '1/8', '1/16'] as const).map(div => (
+          <button
+            key={div}
+            onClick={() => onSnapDivChange(div)}
+            className={[
+              'px-2 py-1 rounded text-xs transition-colors font-mono',
+              snapDiv === div
+                ? 'bg-zinc-500 text-white'
+                : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
+            ].join(' ')}
+          >
+            {div}
+          </button>
+        ))}
+        <button
+          onClick={onTripletToggle}
+          className={[
+            'px-2 py-1 rounded text-xs transition-colors font-mono',
+            triplet ? 'bg-zinc-500 text-white' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
+          ].join(' ')}
+          title="Triplet"
+        >
+          T
+        </button>
       </div>
       <div className="ml-auto">
         <button
@@ -512,6 +557,13 @@ export default function PianoRoll() {
   const handleExport = useCallback(() => downloadSwell(song), [song]);
   const handleImport = useCallback((imported: Song) => setSong(imported), []);
 
+  // ── Snap resolution ────────────────────────────────────────────────────────
+  const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
+  const [triplet, setTriplet] = useState(false);
+  const resolution = toResolution(snapDiv, triplet);
+  const resolutionRef = useRef(resolution);
+  resolutionRef.current = resolution;
+
   // ── Drag-to-move / click-to-add / click-to-delete ─────────────────────────
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -527,12 +579,13 @@ export default function PianoRoll() {
       if (!d) return;
       const rect = gridRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const beat = Math.floor((e.clientX - rect.left) / CELL_W);
+      const rawBeat = (e.clientX - rect.left) / CELL_W;
       const pitchIndex = Math.floor((e.clientY - rect.top) / CELL_H);
       const pitch = PITCHES[pitchIndex];
       if (pitch === undefined) return;
       const s = songRef.current;
-      const newBeat = Math.max(0, Math.min(s.totalBeats - 1, beat - d.beatOffset));
+      const res = resolutionRef.current;
+      const newBeat = Math.max(0, Math.min(s.totalBeats - 1, snapBeat(rawBeat - d.beatOffset, res)));
       const hasMoved = newBeat !== d.originalBeat || pitch !== d.originalPitch;
       setDrag({ ...d, previewBeat: newBeat, previewPitch: pitch, hasMoved });
     };
@@ -561,28 +614,30 @@ export default function PianoRoll() {
       if (suggestion.status === 'ready') return;
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
-      const beat = Math.floor((e.clientX - rect.left) / CELL_W);
+      const rawBeat = (e.clientX - rect.left) / CELL_W;
       const pitchIndex = Math.floor((e.clientY - rect.top) / CELL_H);
       const pitch = PITCHES[pitchIndex];
-      if (pitch === undefined || beat < 0 || beat >= song.totalBeats) return;
+      if (pitch === undefined || rawBeat < 0 || rawBeat >= song.totalBeats) return;
+      // Hit-test uses raw position for accuracy
       const hit = song.notes.find(
-        n => n.pitch === pitch && beat >= n.startBeat && beat < n.startBeat + n.durationBeats
+        n => n.pitch === pitch && rawBeat >= n.startBeat && rawBeat < n.startBeat + n.durationBeats
       );
       if (hit) {
         setDrag({
           noteId: hit.id,
           originalBeat: hit.startBeat,
           originalPitch: hit.pitch,
-          beatOffset: beat - hit.startBeat,
+          beatOffset: rawBeat - hit.startBeat,
           previewBeat: hit.startBeat,
           previewPitch: hit.pitch,
           hasMoved: false,
         });
       } else {
-        setSong(s => addNote(s, pitch, beat));
+        const snapped = Math.max(0, Math.min(song.totalBeats - resolution, snapBeat(rawBeat, resolution)));
+        setSong(s => addNote(s, pitch, snapped, resolution));
       }
     },
-    [song.notes, song.totalBeats, suggestion.status]
+    [song.notes, song.totalBeats, suggestion.status, resolution]
   );
 
   // ── Agent suggestion ───────────────────────────────────────────────────────
@@ -686,6 +741,10 @@ export default function PianoRoll() {
         musicGenActive={musicGen.status !== 'hidden'}
         onExport={handleExport}
         onImport={handleImport}
+        snapDiv={snapDiv}
+        triplet={triplet}
+        onSnapDivChange={setSnapDiv}
+        onTripletToggle={() => setTriplet(t => !t)}
       />
       {musicGen.status !== 'hidden' && (
         <MusicGenBar
@@ -732,17 +791,22 @@ export default function PianoRoll() {
               />
             ))}
 
-            {/* Vertical beat lines */}
-            {Array.from({ length: song.totalBeats + 1 }, (_, i) => (
-              <div
-                key={i}
-                className={[
-                  'absolute top-0 w-px',
-                  i % song.beatsPerMeasure === 0 ? 'bg-zinc-600' : 'bg-zinc-700/60',
-                ].join(' ')}
-                style={{ left: i * CELL_W, height: gridHeight }}
-              />
-            ))}
+            {/* Vertical grid lines */}
+            {Array.from({ length: Math.round(song.totalBeats / resolution) + 1 }, (_, i) => {
+              const beat = i * resolution;
+              const isMeasure = beat % song.beatsPerMeasure < 1e-6;
+              const isBeat = beat % 1 < 1e-6;
+              return (
+                <div
+                  key={i}
+                  className={[
+                    'absolute top-0 w-px',
+                    isMeasure ? 'bg-zinc-600' : isBeat ? 'bg-zinc-700/60' : 'bg-zinc-700/30',
+                  ].join(' ')}
+                  style={{ left: beat * CELL_W, height: gridHeight }}
+                />
+              );
+            })}
 
             {/* Notes (with diff overlay) */}
             {displayNotes.map(({ note, variant }) => {
