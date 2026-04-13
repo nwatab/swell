@@ -62,6 +62,13 @@ type SuggestionState =
   | { status: 'loading' }
   | { status: 'ready'; suggestedSong: Song; diff: NoteDiff };
 
+// ── MusicGen state ───────────────────────────────────────────────────────────
+type MusicGenState =
+  | { status: 'hidden' }
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error'; message: string };
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function PianoKey({ pitch }: { pitch: number }) {
@@ -149,12 +156,16 @@ function TransportBar({
   bpm,
   onTogglePlay,
   onBpmChange,
+  onMusicGenToggle,
+  musicGenActive,
 }: {
   playing: boolean;
   beat: number;
   bpm: number;
   onTogglePlay: () => void;
   onBpmChange: (bpm: number) => void;
+  onMusicGenToggle: () => void;
+  musicGenActive: boolean;
 }) {
   const measure = Math.floor(beat / 4) + 1;
   const beatInMeasure = Math.floor(beat % 4) + 1;
@@ -182,6 +193,84 @@ function TransportBar({
           className="w-16 bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-zinc-200 text-sm"
         />
       </label>
+      <div className="ml-auto">
+        <button
+          onClick={onMusicGenToggle}
+          className={[
+            'px-3 py-1 rounded text-sm transition-colors',
+            musicGenActive
+              ? 'bg-purple-700 hover:bg-purple-600 text-purple-100'
+              : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300',
+          ].join(' ')}
+        >
+          ♫ Generate Audio
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── MusicGen bar ─────────────────────────────────────────────────────────────
+
+function MusicGenBar({
+  state,
+  onGenerate,
+  onClose,
+}: {
+  state: MusicGenState;
+  onGenerate: (prompt: string) => void;
+  onClose: () => void;
+}) {
+  const [prompt, setPrompt] = useState('');
+  const isLoading = state.status === 'loading';
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim() || isLoading) return;
+    onGenerate(prompt.trim());
+  };
+
+  return (
+    <div className="flex-shrink-0 border-b border-zinc-700 bg-zinc-850">
+      {state.status === 'error' && (
+        <div className="px-4 py-1 bg-red-900/40 text-red-400 text-xs border-b border-zinc-700">
+          {state.message}
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="flex items-center gap-2 px-4 py-2">
+        <span className="text-xs text-purple-400 flex-shrink-0 font-medium">MusicGen</span>
+        <div className="relative flex-1">
+          <input
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
+            placeholder="e.g. calm ambient piano with soft reverb"
+            disabled={isLoading}
+            autoFocus
+            className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-purple-500 disabled:opacity-50"
+          />
+          {isLoading && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 text-xs animate-pulse">
+              ●●●
+            </span>
+          )}
+        </div>
+        <button
+          type="submit"
+          disabled={isLoading || !prompt.trim()}
+          className="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-sm text-white transition-colors flex-shrink-0"
+        >
+          Generate
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isLoading}
+          className="px-2 py-1.5 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-sm text-zinc-400 transition-colors flex-shrink-0"
+          aria-label="Close"
+        >
+          ✕
+        </button>
+      </form>
     </div>
   );
 }
@@ -293,6 +382,7 @@ export default function PianoRoll() {
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [suggestion, setSuggestion] = useState<SuggestionState>({ status: 'idle' });
+  const [musicGen, setMusicGen] = useState<MusicGenState>({ status: 'hidden' });
 
   const activeSong = suggestion.status === 'ready' ? suggestion.suggestedSong : song;
 
@@ -390,6 +480,37 @@ export default function PianoRoll() {
     setSuggestion({ status: 'idle' });
   }, []);
 
+  // ── MusicGen ───────────────────────────────────────────────────────────────
+  const handleMusicGenToggle = useCallback(() => {
+    setMusicGen(s => s.status === 'hidden' ? { status: 'idle' } : { status: 'hidden' });
+  }, []);
+
+  const handleMusicGen = useCallback(async (prompt: string) => {
+    setMusicGen({ status: 'loading' });
+    try {
+      const res = await fetch('/api/musicgen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMusicGen({ status: 'error', message: data.error ?? 'API error' });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'composition.mp3';
+      a.click();
+      URL.revokeObjectURL(url);
+      setMusicGen({ status: 'idle' });
+    } catch (err) {
+      setMusicGen({ status: 'error', message: err instanceof Error ? err.message : String(err) });
+    }
+  }, []);
+
   // ── Render ─────────────────────────────────────────────────────────────────
   const gridWidth = song.totalBeats * CELL_W;
   const gridHeight = PITCHES.length * CELL_H;
@@ -412,7 +533,16 @@ export default function PianoRoll() {
         bpm={song.bpm}
         onTogglePlay={togglePlay}
         onBpmChange={handleBpmChange}
+        onMusicGenToggle={handleMusicGenToggle}
+        musicGenActive={musicGen.status !== 'hidden'}
       />
+      {musicGen.status !== 'hidden' && (
+        <MusicGenBar
+          state={musicGen}
+          onGenerate={handleMusicGen}
+          onClose={() => setMusicGen({ status: 'hidden' })}
+        />
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Piano keyboard */}
