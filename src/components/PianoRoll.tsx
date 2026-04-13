@@ -28,6 +28,26 @@ const PITCHES = Array.from(
   (_, i) => MAX_PITCH - i
 );
 
+// ── Import / export helpers ──────────────────────────────────────────────────
+const parseSwell = (text: string): Song => {
+  const d = JSON.parse(text);
+  if (d.version !== '1.0') throw new Error(`Unsupported version: ${d.version}`);
+  if (typeof d.bpm !== 'number' || typeof d.beatsPerMeasure !== 'number' || typeof d.totalBeats !== 'number')
+    throw new Error('Invalid song format');
+  if (!Array.isArray(d.notes)) throw new Error('Invalid notes');
+  return d as Song;
+};
+
+const downloadSwell = (song: Song) => {
+  const blob = new Blob([JSON.stringify(song, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'composition.swell';
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 // ── Song state helpers ───────────────────────────────────────────────────────
 const addNote = (song: Song, pitch: number, startBeat: number): Song => ({
   ...song,
@@ -37,6 +57,11 @@ const addNote = (song: Song, pitch: number, startBeat: number): Song => ({
 const removeNote = (song: Song, id: string): Song => ({
   ...song,
   notes: song.notes.filter(n => n.id !== id),
+});
+
+const moveNote = (song: Song, id: string, startBeat: number, pitch: number): Song => ({
+  ...song,
+  notes: song.notes.map(n => n.id === id ? { ...n, startBeat, pitch } : n),
 });
 
 // ── Diff helpers ─────────────────────────────────────────────────────────────
@@ -61,6 +86,17 @@ type SuggestionState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ready'; suggestedSong: Song; diff: NoteDiff };
+
+// ── Drag state ───────────────────────────────────────────────────────────────
+type DragState = {
+  noteId: string;
+  originalBeat: number;
+  originalPitch: number;
+  beatOffset: number; // click position within note
+  previewBeat: number;
+  previewPitch: number;
+  hasMoved: boolean;
+};
 
 // ── MusicGen state ───────────────────────────────────────────────────────────
 type MusicGenState =
@@ -117,13 +153,15 @@ function NoteBlock({
 }: {
   note: Note;
   pitchIndex: number;
-  variant?: 'normal' | 'added' | 'removed';
+  variant?: 'normal' | 'added' | 'removed' | 'dragging';
 }) {
   const colorClass =
     variant === 'added'
       ? 'bg-emerald-500 border-emerald-300'
       : variant === 'removed'
       ? 'bg-red-500/60 border-red-400 opacity-70'
+      : variant === 'dragging'
+      ? 'bg-blue-400 border-blue-200 opacity-80'
       : 'bg-blue-500 border-blue-300';
 
   return (
@@ -158,6 +196,8 @@ function TransportBar({
   onBpmChange,
   onMusicGenToggle,
   musicGenActive,
+  onExport,
+  onImport,
 }: {
   playing: boolean;
   beat: number;
@@ -166,9 +206,27 @@ function TransportBar({
   onBpmChange: (bpm: number) => void;
   onMusicGenToggle: () => void;
   musicGenActive: boolean;
+  onExport: () => void;
+  onImport: (song: Song) => void;
 }) {
   const measure = Math.floor(beat / 4) + 1;
   const beatInMeasure = Math.floor(beat % 4) + 1;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        onImport(parseSwell(reader.result as string));
+      } catch (err) {
+        alert(`Failed to open file: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   return (
     <div className="flex items-center gap-4 px-4 bg-zinc-900 border-b border-zinc-700 h-12 flex-shrink-0">
@@ -193,6 +251,27 @@ function TransportBar({
           className="w-16 bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-zinc-200 text-sm"
         />
       </label>
+      <div className="flex gap-1">
+        <button
+          onClick={onExport}
+          className="px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-xs text-zinc-300 transition-colors"
+        >
+          Save
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-xs text-zinc-300 transition-colors"
+        >
+          Open
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".swell,application/json"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      </div>
       <div className="ml-auto">
         <button
           onClick={onMusicGenToggle}
@@ -430,9 +509,57 @@ export default function PianoRoll() {
     setSong(s => ({ ...s, bpm }));
   }, []);
 
-  const handleGridDoubleClick = useCallback(
+  const handleExport = useCallback(() => downloadSwell(song), [song]);
+  const handleImport = useCallback((imported: Song) => setSong(imported), []);
+
+  // ── Drag-to-move / click-to-add / click-to-delete ─────────────────────────
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  dragRef.current = drag;
+  const songRef = useRef<Song>(song);
+  songRef.current = song;
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Window-level move/up handlers so drag works even outside the grid
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const rect = gridRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const beat = Math.floor((e.clientX - rect.left) / CELL_W);
+      const pitchIndex = Math.floor((e.clientY - rect.top) / CELL_H);
+      const pitch = PITCHES[pitchIndex];
+      if (pitch === undefined) return;
+      const s = songRef.current;
+      const newBeat = Math.max(0, Math.min(s.totalBeats - 1, beat - d.beatOffset));
+      const hasMoved = newBeat !== d.originalBeat || pitch !== d.originalPitch;
+      setDrag({ ...d, previewBeat: newBeat, previewPitch: pitch, hasMoved });
+    };
+
+    const handleMouseUp = () => {
+      const d = dragRef.current;
+      if (!d) return;
+      if (d.hasMoved) {
+        setSong(s => moveNote(s, d.noteId, d.previewBeat, d.previewPitch));
+      } else {
+        setSong(s => removeNote(s, d.noteId));
+      }
+      setDrag(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []); // stable — reads latest state via refs
+
+  const handleGridMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (suggestion.status === 'ready') return; // lock grid while reviewing
+      if (suggestion.status === 'ready') return;
+      e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const beat = Math.floor((e.clientX - rect.left) / CELL_W);
       const pitchIndex = Math.floor((e.clientY - rect.top) / CELL_H);
@@ -441,7 +568,19 @@ export default function PianoRoll() {
       const hit = song.notes.find(
         n => n.pitch === pitch && beat >= n.startBeat && beat < n.startBeat + n.durationBeats
       );
-      setSong(s => (hit ? removeNote(s, hit.id) : addNote(s, pitch, beat)));
+      if (hit) {
+        setDrag({
+          noteId: hit.id,
+          originalBeat: hit.startBeat,
+          originalPitch: hit.pitch,
+          beatOffset: beat - hit.startBeat,
+          previewBeat: hit.startBeat,
+          previewPitch: hit.pitch,
+          hasMoved: false,
+        });
+      } else {
+        setSong(s => addNote(s, pitch, beat));
+      }
     },
     [song.notes, song.totalBeats, suggestion.status]
   );
@@ -515,8 +654,8 @@ export default function PianoRoll() {
   const gridWidth = song.totalBeats * CELL_W;
   const gridHeight = PITCHES.length * CELL_H;
 
-  // Which notes to show: base + diff overlay
-  const displayNotes: { note: Note; variant: 'normal' | 'added' | 'removed' }[] =
+  // Which notes to show: base + diff overlay + drag preview
+  const baseNotes: { note: Note; variant: 'normal' | 'added' | 'removed' | 'dragging' }[] =
     suggestion.status === 'ready'
       ? [
           ...suggestion.diff.unchanged.map(note => ({ note, variant: 'normal' as const })),
@@ -524,6 +663,16 @@ export default function PianoRoll() {
           ...suggestion.diff.added.map(note => ({ note, variant: 'added' as const })),
         ]
       : song.notes.map(note => ({ note, variant: 'normal' as const }));
+
+  const displayNotes = drag
+    ? [
+        ...baseNotes.filter(({ note }) => note.id !== drag.noteId),
+        {
+          note: { ...song.notes.find(n => n.id === drag.noteId)!, startBeat: drag.previewBeat, pitch: drag.previewPitch },
+          variant: 'dragging' as const,
+        },
+      ]
+    : baseNotes;
 
   return (
     <div className="flex flex-col h-screen bg-zinc-900 text-white overflow-hidden">
@@ -535,6 +684,8 @@ export default function PianoRoll() {
         onBpmChange={handleBpmChange}
         onMusicGenToggle={handleMusicGenToggle}
         musicGenActive={musicGen.status !== 'hidden'}
+        onExport={handleExport}
+        onImport={handleImport}
       />
       {musicGen.status !== 'hidden' && (
         <MusicGenBar
@@ -561,12 +712,13 @@ export default function PianoRoll() {
           <BeatHeader totalBeats={song.totalBeats} beatsPerMeasure={song.beatsPerMeasure} />
 
           <div
+            ref={gridRef}
             className={[
               'relative',
-              suggestion.status === 'ready' ? 'cursor-not-allowed' : 'cursor-crosshair',
+              suggestion.status === 'ready' ? 'cursor-not-allowed' : drag ? 'cursor-grabbing' : 'cursor-crosshair',
             ].join(' ')}
             style={{ width: gridWidth, height: gridHeight }}
-            onDoubleClick={handleGridDoubleClick}
+            onMouseDown={handleGridMouseDown}
           >
             {/* Row backgrounds */}
             {PITCHES.map((pitch, idx) => (
