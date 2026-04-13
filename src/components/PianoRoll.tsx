@@ -15,7 +15,8 @@ const pitchName = (pitch: number) =>
 const genId = () => Math.random().toString(36).slice(2, 9);
 
 // ── Layout constants ─────────────────────────────────────────────────────────
-const CELL_W = 40;
+const DEFAULT_CELL_W = 40;
+const ZOOM_STEPS = [20, 40, 80, 160] as const;
 const CELL_H = 20;
 const KEY_W = 64;
 const HEADER_H = 32;
@@ -135,16 +136,16 @@ function PianoKey({ pitch }: { pitch: number }) {
   );
 }
 
-function BeatHeader({ totalBeats, beatsPerMeasure }: { totalBeats: number; beatsPerMeasure: number }) {
+function BeatHeader({ totalBeats, beatsPerMeasure, cellW }: { totalBeats: number; beatsPerMeasure: number; cellW: number }) {
   return (
     <div
       className="flex bg-zinc-800 border-b border-zinc-600 sticky top-0 z-10"
-      style={{ height: HEADER_H, width: totalBeats * CELL_W }}
+      style={{ height: HEADER_H, width: totalBeats * cellW }}
     >
       {Array.from({ length: totalBeats }, (_, i) => (
         <div
           key={i}
-          style={{ width: CELL_W, flexShrink: 0 }}
+          style={{ width: cellW, flexShrink: 0 }}
           className={[
             'flex items-center justify-start pl-1 text-[10px] border-r border-zinc-700',
             i % beatsPerMeasure === 0 ? 'text-zinc-300' : 'text-zinc-600',
@@ -160,10 +161,12 @@ function BeatHeader({ totalBeats, beatsPerMeasure }: { totalBeats: number; beats
 function NoteBlock({
   note,
   pitchIndex,
+  cellW,
   variant = 'normal',
 }: {
   note: Note;
   pitchIndex: number;
+  cellW: number;
   variant?: 'normal' | 'added' | 'removed' | 'dragging';
 }) {
   const colorClass =
@@ -179,20 +182,20 @@ function NoteBlock({
     <div
       className={`absolute rounded-sm border pointer-events-none ${colorClass}`}
       style={{
-        left: note.startBeat * CELL_W + 1,
+        left: note.startBeat * cellW + 1,
         top: pitchIndex * CELL_H + 2,
-        width: note.durationBeats * CELL_W - 2,
+        width: note.durationBeats * cellW - 2,
         height: CELL_H - 4,
       }}
     />
   );
 }
 
-function Playhead({ beat }: { beat: number }) {
+function Playhead({ beat, cellW }: { beat: number; cellW: number }) {
   return (
     <div
       className="absolute top-0 bottom-0 w-px bg-red-400 z-20 pointer-events-none"
-      style={{ left: beat * CELL_W }}
+      style={{ left: beat * cellW }}
     />
   );
 }
@@ -213,6 +216,10 @@ function TransportBar({
   triplet,
   onSnapDivChange,
   onTripletToggle,
+  onZoomIn,
+  onZoomOut,
+  canZoomIn,
+  canZoomOut,
 }: {
   playing: boolean;
   beat: number;
@@ -227,6 +234,10 @@ function TransportBar({
   triplet: boolean;
   onSnapDivChange: (div: SnapDiv) => void;
   onTripletToggle: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  canZoomIn: boolean;
+  canZoomOut: boolean;
 }) {
   const measure = Math.floor(beat / 4) + 1;
   const beatInMeasure = Math.floor(beat % 4) + 1;
@@ -315,6 +326,24 @@ function TransportBar({
           title="Triplet"
         >
           T
+        </button>
+      </div>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={onZoomOut}
+          disabled={!canZoomOut}
+          className="w-7 h-7 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 text-zinc-300 text-sm transition-colors"
+          title="Zoom out"
+        >
+          −
+        </button>
+        <button
+          onClick={onZoomIn}
+          disabled={!canZoomIn}
+          className="w-7 h-7 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 text-zinc-300 text-sm transition-colors"
+          title="Zoom in"
+        >
+          +
         </button>
       </div>
       <div className="ml-auto">
@@ -557,6 +586,14 @@ export default function PianoRoll() {
   const handleExport = useCallback(() => downloadSwell(song), [song]);
   const handleImport = useCallback((imported: Song) => setSong(imported), []);
 
+  // ── Zoom ────────────────────────────────────────────────────────────────────
+  const [cellW, setCellW] = useState(DEFAULT_CELL_W);
+  const cellWRef = useRef(cellW);
+  cellWRef.current = cellW;
+  const zoomIdx = ZOOM_STEPS.indexOf(cellW as typeof ZOOM_STEPS[number]);
+  const zoomIn  = useCallback(() => setCellW(ZOOM_STEPS[Math.min(zoomIdx + 1, ZOOM_STEPS.length - 1)]), [zoomIdx]);
+  const zoomOut = useCallback(() => setCellW(ZOOM_STEPS[Math.max(zoomIdx - 1, 0)]), [zoomIdx]);
+
   // ── Snap resolution ────────────────────────────────────────────────────────
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
   const [triplet, setTriplet] = useState(false);
@@ -579,7 +616,7 @@ export default function PianoRoll() {
       if (!d) return;
       const rect = gridRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const rawBeat = (e.clientX - rect.left) / CELL_W;
+      const rawBeat = (e.clientX - rect.left) / cellWRef.current;
       const pitchIndex = Math.floor((e.clientY - rect.top) / CELL_H);
       const pitch = PITCHES[pitchIndex];
       if (pitch === undefined) return;
@@ -614,7 +651,7 @@ export default function PianoRoll() {
       if (suggestion.status === 'ready') return;
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
-      const rawBeat = (e.clientX - rect.left) / CELL_W;
+      const rawBeat = (e.clientX - rect.left) / cellW;
       const pitchIndex = Math.floor((e.clientY - rect.top) / CELL_H);
       const pitch = PITCHES[pitchIndex];
       if (pitch === undefined || rawBeat < 0 || rawBeat >= song.totalBeats) return;
@@ -637,7 +674,7 @@ export default function PianoRoll() {
         setSong(s => addNote(s, pitch, snapped, resolution));
       }
     },
-    [song.notes, song.totalBeats, suggestion.status, resolution]
+    [song.notes, song.totalBeats, suggestion.status, resolution, cellW]
   );
 
   // ── Agent suggestion ───────────────────────────────────────────────────────
@@ -706,7 +743,7 @@ export default function PianoRoll() {
   }, []);
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  const gridWidth = song.totalBeats * CELL_W;
+  const gridWidth = song.totalBeats * cellW;
   const gridHeight = PITCHES.length * CELL_H;
 
   // Which notes to show: base + diff overlay + drag preview
@@ -745,6 +782,10 @@ export default function PianoRoll() {
         triplet={triplet}
         onSnapDivChange={setSnapDiv}
         onTripletToggle={() => setTriplet(t => !t)}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        canZoomIn={zoomIdx < ZOOM_STEPS.length - 1}
+        canZoomOut={zoomIdx > 0}
       />
       {musicGen.status !== 'hidden' && (
         <MusicGenBar
@@ -768,7 +809,7 @@ export default function PianoRoll() {
 
         {/* Scrollable grid */}
         <div className="flex-1 overflow-auto">
-          <BeatHeader totalBeats={song.totalBeats} beatsPerMeasure={song.beatsPerMeasure} />
+          <BeatHeader totalBeats={song.totalBeats} beatsPerMeasure={song.beatsPerMeasure} cellW={cellW} />
 
           <div
             ref={gridRef}
@@ -803,7 +844,7 @@ export default function PianoRoll() {
                     'absolute top-0 w-px',
                     isMeasure ? 'bg-zinc-600' : isBeat ? 'bg-zinc-700/60' : 'bg-zinc-700/30',
                   ].join(' ')}
-                  style={{ left: beat * CELL_W, height: gridHeight }}
+                  style={{ left: beat * cellW, height: gridHeight }}
                 />
               );
             })}
@@ -813,12 +854,12 @@ export default function PianoRoll() {
               const pitchIndex = PITCHES.indexOf(note.pitch);
               if (pitchIndex === -1) return null;
               return (
-                <NoteBlock key={`${note.id}-${variant}`} note={note} pitchIndex={pitchIndex} variant={variant} />
+                <NoteBlock key={`${note.id}-${variant}`} note={note} pitchIndex={pitchIndex} cellW={cellW} variant={variant} />
               );
             })}
 
             {/* Playhead */}
-            {playing && <Playhead beat={playhead} />}
+            {playing && <Playhead beat={playhead} cellW={cellW} />}
           </div>
         </div>
       </div>
