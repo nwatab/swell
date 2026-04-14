@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { playSong } from '../lib/audio';
-import type { Note, Song } from '../types/song';
+import type { Note, Song, Stream } from '../types/song';
 import { DEFAULT_SONG } from '../types/song';
 
 // ── Piano constants ─────────────────────────────────────────────────────────
@@ -17,7 +17,8 @@ const genId = () => Math.random().toString(36).slice(2, 9);
 // ── Layout constants ─────────────────────────────────────────────────────────
 const DEFAULT_CELL_W = 40;
 const ZOOM_STEPS = [20, 40, 80, 160] as const;
-const CELL_H = 20;
+const WHITE_H = 28;   // px per white-key row
+const BLACK_H = 16;   // px for black-key overlay band
 const KEY_W = 64;
 const HEADER_H = 32;
 
@@ -29,6 +30,47 @@ const PITCHES = Array.from(
   (_, i) => MAX_PITCH - i
 );
 
+// ── Keyboard layout ──────────────────────────────────────────────────────────
+// Map each white-key pitch to its display index (0 = C6 at top, incrementing downward)
+const WHITE_INDEX: Map<number, number> = (() => {
+  const m = new Map<number, number>();
+  let idx = 0;
+  for (let p = MAX_PITCH; p >= MIN_PITCH; p--) {
+    if (!isBlack(p)) m.set(p, idx++);
+  }
+  return m;
+})();
+
+const WHITE_PITCH_AT: Map<number, number> = (() => {
+  const m = new Map<number, number>();
+  for (const [pitch, idx] of WHITE_INDEX) m.set(idx, pitch);
+  return m;
+})();
+
+const NUM_WHITE_KEYS = WHITE_INDEX.size; // 29 for C2–C6
+
+// Top y-coordinate of the visual block for a pitch in the grid
+const pitchY = (pitch: number): number =>
+  isBlack(pitch)
+    // Black keys float centred on the boundary between lower (pitch-1) and upper (pitch+1) white keys
+    ? WHITE_INDEX.get(pitch - 1)! * WHITE_H - BLACK_H / 2
+    : WHITE_INDEX.get(pitch)! * WHITE_H;
+
+// Visual block height for a pitch
+const pitchBlockH = (pitch: number): number => (isBlack(pitch) ? BLACK_H : WHITE_H);
+
+// Grid y-coordinate → MIDI pitch; black key bands take visual priority
+const yToPitch = (y: number): number | null => {
+  for (let p = MIN_PITCH; p <= MAX_PITCH; p++) {
+    if (isBlack(p)) {
+      const top = pitchY(p);
+      if (y >= top && y < top + BLACK_H) return p;
+    }
+  }
+  const idx = Math.floor(y / WHITE_H);
+  return WHITE_PITCH_AT.get(idx) ?? null;
+};
+
 // ── Import / export helpers ──────────────────────────────────────────────────
 const parseSwell = (text: string): Song => {
   const d = JSON.parse(text);
@@ -36,7 +78,7 @@ const parseSwell = (text: string): Song => {
   if (typeof d.bpm !== 'number' || typeof d.beatsPerMeasure !== 'number' || typeof d.totalBeats !== 'number')
     throw new Error('Invalid song format');
   if (!Array.isArray(d.notes)) throw new Error('Invalid notes');
-  return d as Song;
+  return { ...d, streams: Array.isArray(d.streams) ? d.streams : [] } as Song;
 };
 
 const downloadSwell = (song: Song) => {
@@ -79,10 +121,119 @@ const CHORD_LABELS: Record<ChordType, string> = {
   min7: 'Min7',
 };
 
-// ── Song state helpers ───────────────────────────────────────────────────────
-const addNote = (song: Song, pitch: number, startBeat: number, durationBeats = 1): Song => ({
+// ── Scale / Roman numeral helpers ────────────────────────────────────────────
+type RootNote = 'C' | 'C#' | 'D' | 'D#' | 'E' | 'F' | 'F#' | 'G' | 'G#' | 'A' | 'A#' | 'B';
+type ScaleMode = 'major' | 'minor';
+type GlobalKey = { root: RootNote; mode: ScaleMode } | null;
+
+const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11] as const;
+const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10] as const;
+const ROMAN_NUMERALS: Record<ScaleMode, readonly string[]> = {
+  major: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'],
+  minor: ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii'],
+};
+
+const getScaleDegree = (pitch: number, key: GlobalKey): number | null => {
+  if (!key) return null;
+  const rootIdx = NOTE_NAMES.indexOf(key.root);
+  const intervals = key.mode === 'major' ? MAJOR_INTERVALS : MINOR_INTERVALS;
+  const semitone = ((pitch % 12) - rootIdx + 12) % 12;
+  const idx = (intervals as readonly number[]).indexOf(semitone);
+  return idx === -1 ? null : idx;
+};
+
+const romanNumeral = (pitch: number, key: GlobalKey): string | null => {
+  const degree = getScaleDegree(pitch, key);
+  if (degree === null || !key) return null;
+  return ROMAN_NUMERALS[key.mode][degree];
+};
+
+// ── Stream helpers ────────────────────────────────────────────────────────────
+const STREAM_COLORS = [
+  '#60a5fa', // blue
+  '#34d399', // emerald
+  '#fbbf24', // amber
+  '#f87171', // rose
+  '#a78bfa', // violet
+  '#22d3ee', // cyan
+  '#fb923c', // orange
+  '#e879f9', // fuchsia
+] as const;
+
+// SATB order: low → high so spread distributes bass-up
+const SATB_NAMES  = ['Bass', 'Tenor', 'Alto', 'Soprano'] as const;
+const SATB_COLORS = ['#f87171', '#fbbf24', '#34d399', '#60a5fa'] as const;
+
+const nextStreamColor = (streams: readonly Stream[]): string => {
+  const used = new Set(streams.map(s => s.color));
+  return STREAM_COLORS.find(c => !used.has(c)) ?? STREAM_COLORS[streams.length % STREAM_COLORS.length];
+};
+
+const addStreamToSong = (song: Song, name: string, color: string): Song => ({
   ...song,
-  notes: [...song.notes, { id: genId(), pitch, startBeat, durationBeats, velocity: 100 }],
+  streams: [...song.streams, { id: genId(), name, color }],
+});
+
+const removeStreamFromSong = (song: Song, streamId: string): Song => ({
+  ...song,
+  streams: song.streams.filter(s => s.id !== streamId),
+  notes: song.notes.map(n => n.streamId === streamId ? { ...n, streamId: undefined } : n),
+});
+
+const renameStream = (song: Song, streamId: string, name: string): Song => ({
+  ...song,
+  streams: song.streams.map(s => s.id === streamId ? { ...s, name } : s),
+});
+
+const applySATB = (song: Song): Song => ({
+  ...song,
+  streams: SATB_NAMES.map((name, i) => ({ id: genId(), name, color: SATB_COLORS[i] })),
+});
+
+// Find the nearest chord tone strictly above `abovePitch`
+const findNextChordTone = (abovePitch: number, intervals: readonly number[], rootPitch: number): number => {
+  const rootClass = rootPitch % 12;
+  for (let p = abovePitch + 1; p <= MAX_PITCH; p++) {
+    const semitone = ((p % 12) - rootClass + 12) % 12;
+    if ((intervals as number[]).includes(semitone)) return p;
+  }
+  return abovePitch + 12; // fallback: octave above
+};
+
+// Distribute chord tones across streams low → high.
+// stream[0] gets rootPitch; each subsequent stream gets the next chord tone above.
+const spreadChordAcrossStreams = (
+  song: Song,
+  rootPitch: number,
+  startBeat: number,
+  durationBeats: number,
+  intervals: readonly number[],
+): Song => {
+  const { streams } = song;
+  const pitches: number[] = [rootPitch];
+  for (let i = 1; i < streams.length; i++) {
+    pitches.push(findNextChordTone(pitches[i - 1], intervals, rootPitch));
+  }
+  return {
+    ...song,
+    notes: [
+      ...song.notes,
+      ...streams.map((stream, i) => ({
+        id: genId(),
+        pitch: pitches[i],
+        startBeat,
+        durationBeats,
+        velocity: 100,
+        streamId: stream.id,
+      })),
+    ],
+  };
+};
+
+// ── Song state helpers ───────────────────────────────────────────────────────
+const addNote = (song: Song, pitch: number, startBeat: number, durationBeats = 1, streamId?: string): Song => ({
+  ...song,
+  notes: [...song.notes, { id: genId(), pitch, startBeat, durationBeats, velocity: 100, streamId }],
 });
 
 const addChord = (
@@ -91,6 +242,7 @@ const addChord = (
   startBeat: number,
   durationBeats: number,
   intervals: readonly number[],
+  streamId?: string,
 ): Song => ({
   ...song,
   notes: [
@@ -101,6 +253,7 @@ const addChord = (
       startBeat,
       durationBeats,
       velocity: 100,
+      streamId,
     })),
   ],
 });
@@ -158,19 +311,27 @@ type MusicGenState =
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function PianoKey({ pitch }: { pitch: number }) {
-  const black = isBlack(pitch);
+function WhiteKey({ pitch, idx, globalKey }: { pitch: number; idx: number; globalKey: GlobalKey }) {
+  const roman = romanNumeral(pitch, globalKey);
   return (
     <div
-      style={{ height: CELL_H }}
-      className={[
-        'flex items-center justify-end pr-1 text-[10px] border-b select-none',
-        black
-          ? 'bg-zinc-800 text-zinc-500 border-zinc-700'
-          : 'bg-zinc-100 text-zinc-500 border-zinc-300',
-      ].join(' ')}
+      className="absolute w-full flex items-center px-1 text-[10px] border-b select-none bg-zinc-100 text-zinc-500 border-zinc-300"
+      style={{ top: idx * WHITE_H, height: WHITE_H }}
     >
-      {pitch % 12 === 0 ? pitchName(pitch) : ''}
+      <span className="flex-1 font-semibold">{roman ?? ''}</span>
+      <span className="text-[9px]">{pitch % 12 === 0 ? pitchName(pitch) : ''}</span>
+    </div>
+  );
+}
+
+function BlackKey({ pitch, globalKey }: { pitch: number; globalKey: GlobalKey }) {
+  const roman = romanNumeral(pitch, globalKey);
+  return (
+    <div
+      className="absolute flex items-center pl-1 text-[9px] select-none bg-zinc-800 text-zinc-400 rounded-r z-10"
+      style={{ top: pitchY(pitch), height: BLACK_H, left: 0, width: Math.round(KEY_W * 0.72) }}
+    >
+      {roman && <span className="font-semibold">{roman}</span>}
     </div>
   );
 }
@@ -199,32 +360,32 @@ function BeatHeader({ totalBeats, beatsPerMeasure, cellW }: { totalBeats: number
 
 function NoteBlock({
   note,
-  pitchIndex,
   cellW,
   variant = 'normal',
+  streamColor,
 }: {
   note: Note;
-  pitchIndex: number;
   cellW: number;
   variant?: 'normal' | 'added' | 'removed' | 'dragging';
+  streamColor?: string;
 }) {
-  const colorClass =
-    variant === 'added'
-      ? 'bg-emerald-500 border-emerald-300'
-      : variant === 'removed'
-      ? 'bg-red-500/60 border-red-400 opacity-70'
-      : variant === 'dragging'
-      ? 'bg-blue-400 border-blue-200 opacity-80'
-      : 'bg-blue-500 border-blue-300';
+  const color = streamColor ?? '#3b82f6';
+  const style: React.CSSProperties =
+    variant === 'added'   ? { backgroundColor: '#10b981', borderColor: '#6ee7b7' } :
+    variant === 'removed' ? { backgroundColor: 'rgba(239,68,68,0.6)', borderColor: '#f87171', opacity: 0.7 } :
+    variant === 'dragging'? { backgroundColor: color, borderColor: color, opacity: 0.8 } :
+                            { backgroundColor: color, borderColor: color };
 
   return (
     <div
-      className={`absolute rounded-sm border pointer-events-none ${colorClass}`}
+      className="absolute rounded-sm border pointer-events-none"
       style={{
         left: note.startBeat * cellW + 1,
-        top: pitchIndex * CELL_H + 2,
+        top: pitchY(note.pitch) + 2,
         width: note.durationBeats * cellW - 2,
-        height: CELL_H - 4,
+        height: pitchBlockH(note.pitch) - 4,
+        zIndex: isBlack(note.pitch) ? 4 : 3,
+        ...style,
       }}
     />
   );
@@ -236,6 +397,144 @@ function Playhead({ beat, cellW }: { beat: number; cellW: number }) {
       className="absolute top-0 bottom-0 w-px bg-red-400 z-20 pointer-events-none"
       style={{ left: beat * cellW }}
     />
+  );
+}
+
+// ── Streams bar ──────────────────────────────────────────────────────────────
+
+function StreamNameInput({ name, color, onRename }: {
+  name: string;
+  color: string;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { onRename(draft || name); setEditing(false); }}
+        onKeyDown={e => {
+          if (e.key === 'Enter')  { onRename(draft || name); setEditing(false); }
+          if (e.key === 'Escape') { setDraft(name); setEditing(false); }
+          e.stopPropagation();
+        }}
+        onClick={e => e.stopPropagation()}
+        className="w-14 bg-zinc-800 rounded px-0.5 outline-none text-xs"
+        style={{ color }}
+      />
+    );
+  }
+
+  return (
+    <span
+      onDoubleClick={e => { e.stopPropagation(); setEditing(true); setDraft(name); }}
+      title="Double-click to rename"
+      className="select-none"
+    >
+      {name}
+    </span>
+  );
+}
+
+function StreamsBar({
+  streams,
+  activeStreamId,
+  onActiveStreamChange,
+  onAddStream,
+  onRemoveStream,
+  onRenameStream,
+  onApplySATB,
+  spreadChord,
+  onSpreadChordToggle,
+}: {
+  streams: readonly Stream[];
+  activeStreamId: string | null;
+  onActiveStreamChange: (id: string | null) => void;
+  onAddStream: () => void;
+  onRemoveStream: (id: string) => void;
+  onRenameStream: (id: string, name: string) => void;
+  onApplySATB: () => void;
+  spreadChord: boolean;
+  onSpreadChordToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-4 bg-zinc-900 border-b border-zinc-700 h-10 flex-shrink-0 overflow-x-auto">
+      <span className="text-xs text-zinc-500 flex-shrink-0">Streams</span>
+
+      {/* "none" selector */}
+      <button
+        onClick={() => onActiveStreamChange(null)}
+        className={[
+          'px-2 py-1 rounded text-xs transition-colors flex-shrink-0',
+          activeStreamId === null
+            ? 'bg-zinc-500 text-white'
+            : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
+        ].join(' ')}
+        title="No stream (untagged)"
+      >
+        —
+      </button>
+
+      {/* Per-stream buttons */}
+      {streams.map(stream => (
+        <div key={stream.id} className="flex items-center flex-shrink-0">
+          <button
+            onClick={() => onActiveStreamChange(stream.id)}
+            className={[
+              'flex items-center gap-1.5 px-2 py-1 rounded-l text-xs font-medium transition-colors',
+              activeStreamId === stream.id ? 'bg-zinc-600' : 'bg-zinc-700 hover:bg-zinc-600',
+            ].join(' ')}
+            style={{ color: stream.color }}
+          >
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stream.color }} />
+            <StreamNameInput
+              name={stream.name}
+              color={stream.color}
+              onRename={name => onRenameStream(stream.id, name)}
+            />
+          </button>
+          <button
+            onClick={() => onRemoveStream(stream.id)}
+            className="px-1.5 py-1 rounded-r bg-zinc-700 hover:bg-zinc-600 text-zinc-500 hover:text-zinc-300 text-xs border-l border-zinc-600 transition-colors"
+            title="Remove stream"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+
+      <button
+        onClick={onAddStream}
+        className="px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-xs text-zinc-300 transition-colors flex-shrink-0"
+        title="Add stream"
+      >
+        +
+      </button>
+      <button
+        onClick={onApplySATB}
+        className="px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-xs text-zinc-400 transition-colors flex-shrink-0"
+        title="Replace streams with SATB preset (Bass → Tenor → Alto → Soprano)"
+      >
+        SATB
+      </button>
+      <button
+        onClick={onSpreadChordToggle}
+        disabled={streams.length < 2}
+        className={[
+          'px-2 py-1 rounded text-xs transition-colors flex-shrink-0 font-mono disabled:opacity-30',
+          spreadChord
+            ? 'bg-teal-700 text-teal-100'
+            : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
+        ].join(' ')}
+        title="Spread chord across all streams (bass → soprano)"
+      >
+        Spread
+      </button>
+    </div>
   );
 }
 
@@ -261,6 +560,8 @@ function TransportBar({
   canZoomOut,
   chordType,
   onChordTypeChange,
+  globalKey,
+  onGlobalKeyChange,
 }: {
   playing: boolean;
   beat: number;
@@ -281,6 +582,8 @@ function TransportBar({
   canZoomOut: boolean;
   chordType: ChordType;
   onChordTypeChange: (ct: ChordType) => void;
+  globalKey: GlobalKey;
+  onGlobalKeyChange: (key: GlobalKey) => void;
 }) {
   const measure = Math.floor(beat / 4) + 1;
   const beatInMeasure = Math.floor(beat % 4) + 1;
@@ -387,6 +690,28 @@ function TransportBar({
           </button>
         ))}
       </div>
+      <label className="flex items-center gap-1 text-xs text-zinc-400">
+        Key
+        <select
+          value={globalKey ? `${globalKey.root}-${globalKey.mode}` : ''}
+          onChange={e => {
+            if (!e.target.value) { onGlobalKeyChange(null); return; }
+            const sep = e.target.value.lastIndexOf('-');
+            const root = e.target.value.slice(0, sep) as RootNote;
+            const mode = e.target.value.slice(sep + 1) as ScaleMode;
+            onGlobalKeyChange({ root, mode });
+          }}
+          className="bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-zinc-200 text-xs"
+        >
+          <option value="">—</option>
+          {NOTE_NAMES.map(root => (
+            <optgroup key={root} label={root}>
+              <option value={`${root}-major`}>{root} major</option>
+              <option value={`${root}-minor`}>{root} minor</option>
+            </optgroup>
+          ))}
+        </select>
+      </label>
       <div className="flex items-center gap-1">
         <button
           onClick={onZoomOut}
@@ -656,6 +981,40 @@ export default function PianoRoll() {
   // ── Chord mode ────────────────────────────────────────────────────────────
   const [chordType, setChordType] = useState<ChordType>('note');
 
+  // ── Global key ────────────────────────────────────────────────────────────
+  const [globalKey, setGlobalKey] = useState<GlobalKey>(null);
+
+  // ── Streams ───────────────────────────────────────────────────────────────
+  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
+  const [spreadChord, setSpreadChord] = useState(false);
+
+  const handleAddStream = useCallback(() => {
+    setSong(s => {
+      const color = nextStreamColor(s.streams);
+      const name = `Stream ${s.streams.length + 1}`;
+      const updated = addStreamToSong(s, name, color);
+      setActiveStreamId(updated.streams[updated.streams.length - 1].id);
+      return updated;
+    });
+  }, []);
+
+  const handleRemoveStream = useCallback((streamId: string) => {
+    setSong(s => removeStreamFromSong(s, streamId));
+    setActiveStreamId(id => id === streamId ? null : id);
+  }, []);
+
+  const handleRenameStream = useCallback((streamId: string, name: string) => {
+    setSong(s => renameStream(s, streamId, name));
+  }, []);
+
+  const handleApplySATB = useCallback(() => {
+    setSong(s => {
+      const updated = applySATB(s);
+      setActiveStreamId(updated.streams[0]?.id ?? null);
+      return updated;
+    });
+  }, []);
+
   // ── Snap resolution ────────────────────────────────────────────────────────
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
   const [triplet, setTriplet] = useState(false);
@@ -679,9 +1038,8 @@ export default function PianoRoll() {
       const rect = gridRef.current?.getBoundingClientRect();
       if (!rect) return;
       const rawBeat = (e.clientX - rect.left) / cellWRef.current;
-      const pitchIndex = Math.floor((e.clientY - rect.top) / CELL_H);
-      const pitch = PITCHES[pitchIndex];
-      if (pitch === undefined) return;
+      const pitch = yToPitch(e.clientY - rect.top);
+      if (pitch === null) return;
       const s = songRef.current;
       const res = resolutionRef.current;
       const newBeat = Math.max(0, Math.min(s.totalBeats - 1, snapBeat(rawBeat - d.beatOffset, res)));
@@ -714,9 +1072,8 @@ export default function PianoRoll() {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const rawBeat = (e.clientX - rect.left) / cellW;
-      const pitchIndex = Math.floor((e.clientY - rect.top) / CELL_H);
-      const pitch = PITCHES[pitchIndex];
-      if (pitch === undefined || rawBeat < 0 || rawBeat >= song.totalBeats) return;
+      const pitch = yToPitch(e.clientY - rect.top);
+      if (pitch === null || rawBeat < 0 || rawBeat >= song.totalBeats) return;
       // Hit-test uses raw position for accuracy
       const hit = song.notes.find(
         n => n.pitch === pitch && rawBeat >= n.startBeat && rawBeat < n.startBeat + n.durationBeats
@@ -733,10 +1090,14 @@ export default function PianoRoll() {
         });
       } else {
         const snapped = Math.max(0, Math.min(song.totalBeats - resolution, snapBeat(rawBeat, resolution)));
-        setSong(s => addChord(s, pitch, snapped, resolution, CHORD_INTERVALS[chordType]));
+        if (spreadChord && chordType !== 'note' && song.streams.length >= 2) {
+          setSong(s => spreadChordAcrossStreams(s, pitch, snapped, resolution, CHORD_INTERVALS[chordType]));
+        } else {
+          setSong(s => addChord(s, pitch, snapped, resolution, CHORD_INTERVALS[chordType], activeStreamId ?? undefined));
+        }
       }
     },
-    [song.notes, song.totalBeats, suggestion.status, resolution, cellW, chordType]
+    [song.notes, song.totalBeats, suggestion.status, resolution, cellW, chordType, activeStreamId, spreadChord, song.streams.length]
   );
 
   // ── Agent suggestion ───────────────────────────────────────────────────────
@@ -806,7 +1167,7 @@ export default function PianoRoll() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const gridWidth = song.totalBeats * cellW;
-  const gridHeight = PITCHES.length * CELL_H;
+  const gridHeight = NUM_WHITE_KEYS * WHITE_H;
 
   // Which notes to show: base + diff overlay + drag preview
   const baseNotes: { note: Note; variant: 'normal' | 'added' | 'removed' | 'dragging' }[] =
@@ -850,6 +1211,19 @@ export default function PianoRoll() {
         canZoomOut={zoomIdx > 0}
         chordType={chordType}
         onChordTypeChange={setChordType}
+        globalKey={globalKey}
+        onGlobalKeyChange={setGlobalKey}
+      />
+      <StreamsBar
+        streams={song.streams}
+        activeStreamId={activeStreamId}
+        onActiveStreamChange={setActiveStreamId}
+        onAddStream={handleAddStream}
+        onRemoveStream={handleRemoveStream}
+        onRenameStream={handleRenameStream}
+        onApplySATB={handleApplySATB}
+        spreadChord={spreadChord}
+        onSpreadChordToggle={() => setSpreadChord(v => !v)}
       />
       {musicGen.status !== 'hidden' && (
         <MusicGenBar
@@ -866,9 +1240,14 @@ export default function PianoRoll() {
           style={{ width: KEY_W }}
         >
           <div style={{ height: HEADER_H }} className="bg-zinc-800 border-b border-zinc-600" />
-          {PITCHES.map(pitch => (
-            <PianoKey key={pitch} pitch={pitch} />
-          ))}
+          <div className="relative" style={{ height: NUM_WHITE_KEYS * WHITE_H }}>
+            {[...WHITE_INDEX.entries()].map(([pitch, idx]) => (
+              <WhiteKey key={pitch} pitch={pitch} idx={idx} globalKey={globalKey} />
+            ))}
+            {PITCHES.filter(isBlack).map(pitch => (
+              <BlackKey key={pitch} pitch={pitch} globalKey={globalKey} />
+            ))}
+          </div>
         </div>
 
         {/* Scrollable grid */}
@@ -884,17 +1263,31 @@ export default function PianoRoll() {
             style={{ width: gridWidth, height: gridHeight }}
             onMouseDown={handleGridMouseDown}
           >
-            {/* Row backgrounds */}
-            {PITCHES.map((pitch, idx) => (
-              <div
-                key={pitch}
-                className={[
-                  'absolute w-full border-b',
-                  isBlack(pitch) ? 'bg-zinc-800 border-zinc-700' : 'bg-zinc-900 border-zinc-700/50',
-                ].join(' ')}
-                style={{ top: idx * CELL_H, height: CELL_H }}
-              />
-            ))}
+            {/* Row backgrounds — white key rows */}
+            {[...WHITE_INDEX.entries()].map(([pitch, idx]) => {
+              const outOfScale = globalKey !== null && getScaleDegree(pitch, globalKey) === null;
+              return (
+                <div
+                  key={pitch}
+                  className={[
+                    'absolute w-full border-b',
+                    outOfScale ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-900 border-zinc-700/50',
+                  ].join(' ')}
+                  style={{ top: idx * WHITE_H, height: WHITE_H }}
+                />
+              );
+            })}
+            {/* Row backgrounds — black key overlay bands */}
+            {PITCHES.filter(isBlack).map(pitch => {
+              const outOfScale = globalKey !== null && getScaleDegree(pitch, globalKey) === null;
+              return (
+                <div
+                  key={pitch}
+                  className={outOfScale ? 'absolute w-full bg-zinc-900' : 'absolute w-full bg-zinc-800'}
+                  style={{ top: pitchY(pitch), height: BLACK_H, zIndex: 1 }}
+                />
+              );
+            })}
 
             {/* Vertical grid lines */}
             {Array.from({ length: Math.round(song.totalBeats / resolution) + 1 }, (_, i) => {
@@ -915,10 +1308,18 @@ export default function PianoRoll() {
 
             {/* Notes (with diff overlay) */}
             {displayNotes.map(({ note, variant }) => {
-              const pitchIndex = PITCHES.indexOf(note.pitch);
-              if (pitchIndex === -1) return null;
+              if (note.pitch < MIN_PITCH || note.pitch > MAX_PITCH) return null;
+              const streamColor = (variant === 'normal' || variant === 'dragging')
+                ? activeSong.streams.find(s => s.id === note.streamId)?.color
+                : undefined;
               return (
-                <NoteBlock key={`${note.id}-${variant}`} note={note} pitchIndex={pitchIndex} cellW={cellW} variant={variant} />
+                <NoteBlock
+                  key={`${note.id}-${variant}`}
+                  note={note}
+                  cellW={cellW}
+                  variant={variant}
+                  streamColor={streamColor}
+                />
               );
             })}
 
