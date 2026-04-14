@@ -49,21 +49,17 @@ export default function Grid({
         );
       })}
 
-      {/* Row backgrounds — black key overlay bands (same 3-level hierarchy). */}
-      {PITCHES.filter(isBlack).map(pitch => {
-        const deg = getScaleDegree(pitch, globalKey);
-        const bandClass =
-          deg === 0   ? 'bg-zinc-800'   // root black key
-          : deg != null ? 'bg-zinc-900'   // diatonic black key
-          :               'bg-zinc-950';  // out of key
-        return (
-          <div
-            key={pitch}
-            className={`absolute w-full ${bandClass}`}
-            style={{ top: pitchY(pitch), height: BLACK_H, zIndex: 1 }}
-          />
-        );
-      })}
+      {/* Row backgrounds — black key overlay bands.
+          Always zinc-950 (darkest) so they never appear as a lighter stripe
+          over non-diatonic white-key rows (which are also zinc-950).
+          Scale-degree info for black key pitches is shown via keyboard labels. */}
+      {PITCHES.filter(isBlack).map(pitch => (
+        <div
+          key={pitch}
+          className="absolute w-full bg-zinc-950"
+          style={{ top: pitchY(pitch), height: BLACK_H, zIndex: 1 }}
+        />
+      ))}
 
       {/* Vertical grid lines */}
       {Array.from({ length: Math.round(totalBeats / resolution) + 1 }, (_, i) => {
