@@ -11,10 +11,10 @@ export const parseSwell = (text: string): Song => {
     throw new Error('Invalid song format');
   }
   if (!Array.isArray(d.notes)) throw new Error('Invalid notes');
+  if (!d.globalKey?.root || !d.globalKey?.mode) throw new Error('Missing globalKey');
   return {
     ...d,
     streams: Array.isArray(d.streams) ? d.streams : [],
-    globalKey: d.globalKey ?? { root: 'C', mode: 'major' },
     modulations: Array.isArray(d.modulations) ? d.modulations : undefined,
   } as Song;
 };

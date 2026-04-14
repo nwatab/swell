@@ -7,6 +7,7 @@ const VALID_SONG = JSON.stringify({
   totalBeats: 32,
   notes: [],
   streams: [],
+  globalKey: { root: 'C', mode: 'major' },
 });
 
 describe('parseSwell', () => {
@@ -34,12 +35,12 @@ describe('parseSwell', () => {
   });
 
   it('defaults missing streams to empty array', () => {
-    const noStreams = JSON.stringify({ version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [] });
+    const noStreams = JSON.stringify({ version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], globalKey: { root: 'C', mode: 'major' } });
     const song = parseSwell(noStreams);
     expect(song.streams).toEqual([]);
   });
 
-  it('preserves globalKey when present', () => {
+  it('preserves globalKey', () => {
     const withKey = JSON.stringify({
       version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], streams: [],
       globalKey: { root: 'G', mode: 'major' },
@@ -48,9 +49,9 @@ describe('parseSwell', () => {
     expect(song.globalKey).toEqual({ root: 'G', mode: 'major' });
   });
 
-  it('defaults globalKey to C major when absent', () => {
-    const song = parseSwell(VALID_SONG);
-    expect(song.globalKey).toEqual({ root: 'C', mode: 'major' });
+  it('throws when globalKey is absent', () => {
+    const noKey = JSON.stringify({ version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], streams: [] });
+    expect(() => parseSwell(noKey)).toThrow('Missing globalKey');
   });
 
   it('throws on invalid JSON', () => {
