@@ -60,10 +60,49 @@ const toResolution = (div: SnapDiv, triplet: boolean): number => {
 const snapBeat = (rawBeat: number, resolution: number): number =>
   Math.round(rawBeat / resolution) * resolution;
 
+// ── Chord helpers ─────────────────────────────────────────────────────────────
+type ChordType = 'note' | 'maj' | 'min' | 'maj7' | 'min7';
+
+const CHORD_INTERVALS: Record<ChordType, readonly number[]> = {
+  note: [0],
+  maj:  [0, 4, 7],
+  min:  [0, 3, 7],
+  maj7: [0, 4, 7, 11],
+  min7: [0, 3, 7, 10],
+};
+
+const CHORD_LABELS: Record<ChordType, string> = {
+  note: '—',
+  maj:  'Maj',
+  min:  'Min',
+  maj7: 'Maj7',
+  min7: 'Min7',
+};
+
 // ── Song state helpers ───────────────────────────────────────────────────────
 const addNote = (song: Song, pitch: number, startBeat: number, durationBeats = 1): Song => ({
   ...song,
   notes: [...song.notes, { id: genId(), pitch, startBeat, durationBeats, velocity: 100 }],
+});
+
+const addChord = (
+  song: Song,
+  rootPitch: number,
+  startBeat: number,
+  durationBeats: number,
+  intervals: readonly number[],
+): Song => ({
+  ...song,
+  notes: [
+    ...song.notes,
+    ...intervals.map(interval => ({
+      id: genId(),
+      pitch: rootPitch + interval,
+      startBeat,
+      durationBeats,
+      velocity: 100,
+    })),
+  ],
 });
 
 const removeNote = (song: Song, id: string): Song => ({
@@ -220,6 +259,8 @@ function TransportBar({
   onZoomOut,
   canZoomIn,
   canZoomOut,
+  chordType,
+  onChordTypeChange,
 }: {
   playing: boolean;
   beat: number;
@@ -238,6 +279,8 @@ function TransportBar({
   onZoomOut: () => void;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  chordType: ChordType;
+  onChordTypeChange: (ct: ChordType) => void;
 }) {
   const measure = Math.floor(beat / 4) + 1;
   const beatInMeasure = Math.floor(beat % 4) + 1;
@@ -327,6 +370,22 @@ function TransportBar({
         >
           T
         </button>
+      </div>
+      <div className="flex items-center gap-1">
+        {(Object.keys(CHORD_LABELS) as ChordType[]).map(ct => (
+          <button
+            key={ct}
+            onClick={() => onChordTypeChange(ct)}
+            className={[
+              'px-2 py-1 rounded text-xs transition-colors font-mono',
+              chordType === ct
+                ? 'bg-amber-600 text-white'
+                : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
+            ].join(' ')}
+          >
+            {CHORD_LABELS[ct]}
+          </button>
+        ))}
       </div>
       <div className="flex items-center gap-1">
         <button
@@ -594,6 +653,9 @@ export default function PianoRoll() {
   const zoomIn  = useCallback(() => setCellW(ZOOM_STEPS[Math.min(zoomIdx + 1, ZOOM_STEPS.length - 1)]), [zoomIdx]);
   const zoomOut = useCallback(() => setCellW(ZOOM_STEPS[Math.max(zoomIdx - 1, 0)]), [zoomIdx]);
 
+  // ── Chord mode ────────────────────────────────────────────────────────────
+  const [chordType, setChordType] = useState<ChordType>('note');
+
   // ── Snap resolution ────────────────────────────────────────────────────────
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
   const [triplet, setTriplet] = useState(false);
@@ -671,10 +733,10 @@ export default function PianoRoll() {
         });
       } else {
         const snapped = Math.max(0, Math.min(song.totalBeats - resolution, snapBeat(rawBeat, resolution)));
-        setSong(s => addNote(s, pitch, snapped, resolution));
+        setSong(s => addChord(s, pitch, snapped, resolution, CHORD_INTERVALS[chordType]));
       }
     },
-    [song.notes, song.totalBeats, suggestion.status, resolution, cellW]
+    [song.notes, song.totalBeats, suggestion.status, resolution, cellW, chordType]
   );
 
   // ── Agent suggestion ───────────────────────────────────────────────────────
@@ -786,6 +848,8 @@ export default function PianoRoll() {
         onZoomOut={zoomOut}
         canZoomIn={zoomIdx < ZOOM_STEPS.length - 1}
         canZoomOut={zoomIdx > 0}
+        chordType={chordType}
+        onChordTypeChange={setChordType}
       />
       {musicGen.status !== 'hidden' && (
         <MusicGenBar
