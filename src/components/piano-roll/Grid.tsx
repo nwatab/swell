@@ -34,30 +34,32 @@ export default function Grid({
     <>
       {/* Row backgrounds — white key rows */}
       {[...WHITE_INDEX.entries()].map(([pitch, idx]) => {
-        const outOfScale = globalKey !== null && getScaleDegree(pitch, globalKey) === null;
+        const deg = globalKey !== null ? getScaleDegree(pitch, globalKey) : undefined;
+        const rowClass =
+          deg === 0
+            ? 'bg-indigo-950/70 border-indigo-900/40'       // root / tonic
+            : deg != null
+            ? 'bg-zinc-900 border-zinc-800/50'               // diatonic (non-root)
+            : globalKey !== null
+            ? 'bg-zinc-950 border-zinc-800/30'               // out of key
+            : 'bg-zinc-900 border-zinc-800/50';              // no key set
         return (
           <div
             key={pitch}
-            className={[
-              'absolute w-full border-b',
-              outOfScale ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-900 border-zinc-700/50',
-            ].join(' ')}
+            className={`absolute w-full border-b ${rowClass}`}
             style={{ top: idx * WHITE_H, height: WHITE_H }}
           />
         );
       })}
 
-      {/* Row backgrounds — black key overlay bands */}
-      {PITCHES.filter(isBlack).map(pitch => {
-        const outOfScale = globalKey !== null && getScaleDegree(pitch, globalKey) === null;
-        return (
-          <div
-            key={pitch}
-            className={outOfScale ? 'absolute w-full bg-zinc-900' : 'absolute w-full bg-zinc-800'}
-            style={{ top: pitchY(pitch), height: BLACK_H, zIndex: 1 }}
-          />
-        );
-      })}
+      {/* Row backgrounds — black key overlay bands (uniform; keyboard rhythm only) */}
+      {PITCHES.filter(isBlack).map(pitch => (
+        <div
+          key={pitch}
+          className="absolute w-full bg-zinc-800"
+          style={{ top: pitchY(pitch), height: BLACK_H, zIndex: 1 }}
+        />
+      ))}
 
       {/* Vertical grid lines */}
       {Array.from({ length: Math.round(totalBeats / resolution) + 1 }, (_, i) => {
