@@ -6,7 +6,7 @@ import type { Song } from '../types/song';
 import type { SuggestionState, DragState } from '../types/ui-state';
 import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
-import { snapBeat, toResolution } from '../lib/snap';
+import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
 import type { SnapDiv } from '../lib/snap';
 import {
   addChord,
@@ -123,7 +123,7 @@ export const useNoteInteraction = ({
           hasMoved: false,
         });
       } else {
-        const snapped = Math.max(0, Math.min(song.totalBeats - resolution, snapBeat(rawBeat, resolution)));
+        const snapped = Math.max(0, Math.min(song.totalBeats - resolution, snapBeatFloor(rawBeat, resolution)));
 
         // Resolve chord intervals: diatonic types depend on the active key.
         const isDia = chordType === 'dia' || chordType === 'dia7';

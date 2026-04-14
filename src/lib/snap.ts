@@ -5,5 +5,10 @@ export const toResolution = (div: SnapDiv, triplet: boolean): number => {
   return triplet ? (base * 2) / 3 : base;
 };
 
+/** Snap to nearest grid point (used when dragging an existing note). */
 export const snapBeat = (rawBeat: number, resolution: number): number =>
   Math.round(rawBeat / resolution) * resolution;
+
+/** Snap to the grid point at or before rawBeat (used when placing a new note). */
+export const snapBeatFloor = (rawBeat: number, resolution: number): number =>
+  Math.floor(rawBeat / resolution) * resolution;
