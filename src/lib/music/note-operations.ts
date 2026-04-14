@@ -11,9 +11,9 @@ export const MAX_PITCH = 84; // C6
  */
 export const annotateNote = (
   pitch: number,
-  key: KeySignature | null,
-): { spelledPitch?: ReturnType<typeof spellMidi> } =>
-  key ? { spelledPitch: spellMidi(pitch, key) } : {};
+  key: KeySignature,
+): { spelledPitch: ReturnType<typeof spellMidi> } =>
+  ({ spelledPitch: spellMidi(pitch, key) });
 
 // Find the nearest chord tone strictly above `abovePitch`
 export const findNextChordTone = (

@@ -23,6 +23,7 @@ const CS_MAJOR: KeySignature = { root: 'C#', mode: 'major' };
 
 const BASE_SONG: Song = {
   version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], streams: [],
+  globalKey: C_MAJOR,
 };
 
 const note = (
@@ -73,10 +74,6 @@ describe('isDiatonicPitch', () => {
 // ── getScaleDegree ────────────────────────────────────────────────────────────
 
 describe('getScaleDegree', () => {
-  it('returns null when key is null', () => {
-    expect(getScaleDegree(60, null)).toBeNull();
-  });
-
   it('returns 0 for the tonic', () => {
     expect(getScaleDegree(60, C_MAJOR)).toBe(0);
     expect(getScaleDegree(67, G_MAJOR)).toBe(0);
@@ -101,7 +98,6 @@ describe('getScaleDegree', () => {
 // ── romanNumeral ─────────────────────────────────────────────────────────────
 
 describe('romanNumeral', () => {
-  it('returns null when no key', () => expect(romanNumeral(60, null)).toBeNull());
   it('returns null for chromatic pitch', () => expect(romanNumeral(61, C_MAJOR)).toBeNull());
   it('returns uppercase I for major tonic', () => expect(romanNumeral(60, C_MAJOR)).toBe('I'));
   it('returns lowercase i for minor tonic', () => expect(romanNumeral(60, C_MINOR)).toBe('i'));
@@ -193,10 +189,6 @@ describe('snapToDiatonic', () => {
 // ── keyAtBeat ─────────────────────────────────────────────────────────────────
 
 describe('keyAtBeat', () => {
-  it('returns null when globalKey is absent', () => {
-    expect(keyAtBeat(BASE_SONG, 0)).toBeNull();
-  });
-
   it('returns globalKey when no modulations', () => {
     const song = { ...BASE_SONG, globalKey: C_MAJOR };
     expect(keyAtBeat(song, 0)).toEqual(C_MAJOR);
@@ -334,10 +326,9 @@ describe('getDiatonicChordIntervals', () => {
 // ── analyzeHarmony ────────────────────────────────────────────────────────────
 
 describe('analyzeHarmony — out-of-scale', () => {
-  it('emits info for a chromatic note when globalKey is set', () => {
+  it('emits info for a chromatic note', () => {
     const song = {
       ...BASE_SONG,
-      globalKey: C_MAJOR,
       notes: [note('cs', 61, 0)], // C# — not in C major
     };
     const diags = analyzeHarmony(song);
@@ -350,14 +341,8 @@ describe('analyzeHarmony — out-of-scale', () => {
   it('emits no diagnostics for all-diatonic notes', () => {
     const song = {
       ...BASE_SONG,
-      globalKey: C_MAJOR,
       notes: [note('c', 60, 0), note('e', 64, 0), note('g', 67, 0)],
     };
-    expect(analyzeHarmony(song)).toHaveLength(0);
-  });
-
-  it('emits no diagnostics when no key is set', () => {
-    const song = { ...BASE_SONG, notes: [note('cs', 61, 0)] };
     expect(analyzeHarmony(song)).toHaveLength(0);
   });
 });

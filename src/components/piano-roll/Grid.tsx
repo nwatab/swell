@@ -17,7 +17,7 @@ interface GridProps {
   beatsPerMeasure: number;
   cellW: number;
   resolution: number;
-  globalKey: KeySignature | null;
+  globalKey: KeySignature;
 }
 
 export default function Grid({
@@ -32,16 +32,14 @@ export default function Grid({
 
   return (
     <>
-      {/* Row backgrounds — white key rows
-          Lightness hierarchy: root (lightest) > diatonic > out-of-key (darkest).
-          When no key is set, use the standard white-key background. */}
+      {/* Row backgrounds — white key rows.
+          Lightness hierarchy: root (lightest) > diatonic > out-of-key (darkest). */}
       {[...WHITE_INDEX.entries()].map(([pitch, idx]) => {
-        const deg = globalKey !== null ? getScaleDegree(pitch, globalKey) : undefined;
+        const deg = getScaleDegree(pitch, globalKey);
         const rowClass =
-          deg === 0   ? 'bg-zinc-700 border-zinc-600/40'  // root — lightest
-          : deg != null ? 'bg-zinc-800 border-zinc-700/40'  // diatonic
-          : globalKey !== null ? 'bg-zinc-950 border-zinc-800/20'  // out of key — darkest
-          :                 'bg-zinc-800 border-zinc-700/40'; // no key → standard
+          deg === 0   ? 'bg-zinc-700 border-zinc-600/40'   // root — lightest
+          : deg != null ? 'bg-zinc-800 border-zinc-700/40'   // diatonic
+          :               'bg-zinc-950 border-zinc-800/20';  // out of key — darkest
         return (
           <div
             key={pitch}
@@ -51,15 +49,13 @@ export default function Grid({
         );
       })}
 
-      {/* Row backgrounds — black key overlay bands.
-          Same 3-level hierarchy; always darker than the surrounding white row. */}
+      {/* Row backgrounds — black key overlay bands (same 3-level hierarchy). */}
       {PITCHES.filter(isBlack).map(pitch => {
-        const deg = globalKey !== null ? getScaleDegree(pitch, globalKey) : undefined;
+        const deg = getScaleDegree(pitch, globalKey);
         const bandClass =
-          deg === 0   ? 'bg-zinc-800'   // root black key — lighter than other black keys
+          deg === 0   ? 'bg-zinc-800'   // root black key
           : deg != null ? 'bg-zinc-900'   // diatonic black key
-          : globalKey !== null ? 'bg-zinc-950'  // out of key — near-invisible
-          :                 'bg-zinc-900'; // no key → standard black key
+          :               'bg-zinc-950';  // out of key
         return (
           <div
             key={pitch}

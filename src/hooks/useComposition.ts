@@ -17,8 +17,8 @@ import {
 export interface UseCompositionReturn {
   song: Song;
   setSong: React.Dispatch<React.SetStateAction<Song>>;
-  globalKey: KeySignature | null;
-  setGlobalKey: (key: KeySignature | null) => void;
+  globalKey: KeySignature;
+  setGlobalKey: (key: KeySignature) => void;
   activeStreamId: string | null;
   setActiveStreamId: React.Dispatch<React.SetStateAction<string | null>>;
   spreadChord: boolean;
@@ -37,23 +37,17 @@ export const useComposition = (): UseCompositionReturn => {
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
   const [spreadChord, setSpreadChord] = useState(false);
 
-  const globalKey = song.globalKey ?? null;
+  const globalKey = song.globalKey;
 
-  const setGlobalKey = useCallback((newKey: KeySignature | null) => {
+  const setGlobalKey = useCallback((newKey: KeySignature) => {
     setSong(s => {
-      const oldKey = s.globalKey ?? null;
-      const songWithNewKey = { ...s, globalKey: newKey ?? undefined };
+      const songWithNewKey = { ...s, globalKey: newKey };
 
-      // Remap diatonic notes so each keeps its scale degree in the new key.
-      const transformedNotes =
-        oldKey && newKey
-          ? applyKeyTransform(s.notes, oldKey, newKey)
-          : s.notes;
-
-      // Re-annotate all notes with the new key context.
+      // Remap diatonic notes so each keeps its scale degree in the new key,
+      // then re-annotate spelledPitch with the new key context.
       return {
         ...songWithNewKey,
-        notes: transformedNotes.map(n => ({
+        notes: applyKeyTransform(s.notes, s.globalKey, newKey).map(n => ({
           ...n,
           ...annotateNote(n.pitch, keyAtBeat(songWithNewKey, n.startBeat)),
         })),

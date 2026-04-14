@@ -48,9 +48,9 @@ describe('parseSwell', () => {
     expect(song.globalKey).toEqual({ root: 'G', mode: 'major' });
   });
 
-  it('leaves globalKey undefined when absent', () => {
+  it('defaults globalKey to C major when absent', () => {
     const song = parseSwell(VALID_SONG);
-    expect(song.globalKey).toBeUndefined();
+    expect(song.globalKey).toEqual({ root: 'C', mode: 'major' });
   });
 
   it('throws on invalid JSON', () => {

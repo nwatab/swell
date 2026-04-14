@@ -14,7 +14,7 @@ export const parseSwell = (text: string): Song => {
   return {
     ...d,
     streams: Array.isArray(d.streams) ? d.streams : [],
-    globalKey: d.globalKey ?? undefined,
+    globalKey: d.globalKey ?? { root: 'C', mode: 'major' },
     modulations: Array.isArray(d.modulations) ? d.modulations : undefined,
   } as Song;
 };

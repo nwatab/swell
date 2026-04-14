@@ -8,6 +8,7 @@ const BASE: Song = {
   totalBeats: 16,
   notes: [],
   streams: [],
+  globalKey: { root: 'C', mode: 'major' },
 };
 
 const note = (id: string, pitch = 60): Note => ({

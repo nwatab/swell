@@ -131,14 +131,10 @@ export const useNoteInteraction = ({
         let rootPitch = pitch; // may be snapped for diatonic mode
         if (isDia) {
           const key = keyAtBeat(song, snapped);
-          if (key) {
-            // Snap chromatic pitches to the nearest diatonic note so Dia mode
-            // always produces a chord even when the user clicks a black key.
-            rootPitch = snapToDiatonic(pitch, key);
-            intervals = getDiatonicChordIntervals(rootPitch, key, chordType === 'dia7') ?? [0];
-          } else {
-            intervals = [0]; // no key set — single note fallback
-          }
+          // Snap chromatic pitches to the nearest diatonic note so Dia mode
+          // always produces a chord even when the user clicks a black key.
+          rootPitch = snapToDiatonic(pitch, key);
+          intervals = getDiatonicChordIntervals(rootPitch, key, chordType === 'dia7') ?? [0];
         } else {
           intervals = CHORD_INTERVALS[chordType];
         }

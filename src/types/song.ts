@@ -71,7 +71,7 @@ export interface Song {
   readonly notes: readonly Note[];
   readonly streams: readonly Stream[];
   /** Global key signature (applies from beat 0 unless overridden by modulations). */
-  readonly globalKey?: KeySignature;
+  readonly globalKey: KeySignature;
   /** Ordered list of key changes. Each entry overrides globalKey from its beat onward. */
   readonly modulations?: readonly Modulation[];
 }
@@ -83,4 +83,5 @@ export const DEFAULT_SONG: Song = {
   totalBeats: 32,
   notes: [],
   streams: [],
+  globalKey: { root: 'C', mode: 'major' },
 } as const;

@@ -30,8 +30,8 @@ interface TransportBarProps {
   canZoomOut: boolean;
   chordType: ChordType;
   onChordTypeChange: (ct: ChordType) => void;
-  globalKey: KeySignature | null;
-  onGlobalKeyChange: (key: KeySignature | null) => void;
+  globalKey: KeySignature;
+  onGlobalKeyChange: (key: KeySignature) => void;
 }
 
 export default function TransportBar({

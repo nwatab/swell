@@ -70,8 +70,7 @@ const MINOR_DEGREE_SPELLINGS: readonly (readonly [NoteLetter, Accidental][])[] =
 // ── Key utilities ─────────────────────────────────────────────────────────────
 
 /** Returns the active key at a given beat (respects modulations). */
-export const keyAtBeat = (song: Song, beat: number): KeySignature | null => {
-  if (!song.globalKey) return null;
+export const keyAtBeat = (song: Song, beat: number): KeySignature => {
   if (!song.modulations?.length) return song.globalKey;
   // The last modulation whose beat is ≤ the query beat wins; fall back to globalKey.
   const active = song.modulations
@@ -110,17 +109,16 @@ export const isDiatonicPitch = (midi: number, key: KeySignature): boolean =>
  * Scale degree (0-based) of the MIDI pitch in the key, or null if chromatic.
  * Used for Roman numeral display on the piano keyboard.
  */
-export const getScaleDegree = (midi: number, key: KeySignature | null): number | null => {
-  if (!key) return null;
+export const getScaleDegree = (midi: number, key: KeySignature): number | null => {
   const idx = scaleDegreeIndex(((midi % 12) + 12) % 12, key);
   return idx === -1 ? null : idx;
 };
 
-/** Roman numeral label for the scale degree, or null if chromatic / no key. */
-export const romanNumeral = (midi: number, key: KeySignature | null): string | null => {
+/** Roman numeral label for the scale degree, or null if chromatic. */
+export const romanNumeral = (midi: number, key: KeySignature): string | null => {
   const deg = getScaleDegree(midi, key);
   if (deg === null) return null;
-  return key!.mode === 'major'
+  return key.mode === 'major'
     ? ROMAN_NUMERALS_MAJOR[deg]
     : ROMAN_NUMERALS_MINOR[deg];
 };
@@ -354,7 +352,7 @@ export const computeNoteFunctions = (song: Song): NoteFunctionMap => {
       fn = 'chord_tone';
     } else {
       const key = keyAtBeat(song, note.startBeat);
-      fn = key && !isDiatonicPitch(note.pitch, key) ? 'chromatic' : 'unanalyzed';
+      fn = !isDiatonicPitch(note.pitch, key) ? 'chromatic' : 'unanalyzed';
     }
     result.set(note.id, fn);
   }
@@ -383,13 +381,11 @@ export interface Diagnostic {
 
 // ── Harmony analysis ──────────────────────────────────────────────────────────
 
-const pitchLabel = (midi: number, key: KeySignature | null): string => {
-  if (key) {
-    const pc = ((midi % 12) + 12) % 12;
-    const deg = scaleDegreeIndex(pc, key);
-    if (deg !== -1) return spelledPitchToString(spellMidi(midi, key));
-  }
-  return `${PITCH_CLASS_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+const pitchLabel = (midi: number, key: KeySignature): string => {
+  const pc = ((midi % 12) + 12) % 12;
+  const deg = scaleDegreeIndex(pc, key);
+  if (deg !== -1) return spelledPitchToString(spellMidi(midi, key));
+  return `${PITCH_CLASS_NAMES[pc]}${Math.floor(midi / 12) - 1}`;
 };
 
 /**
@@ -405,19 +401,16 @@ export const analyzeHarmony = (song: Song): readonly Diagnostic[] => {
   const diags: Diagnostic[] = [];
 
   // ── 1. Out-of-scale notes ──────────────────────────────────────────────────
-  if (song.globalKey) {
-    for (const note of song.notes) {
-      const key = keyAtBeat(song, note.startBeat);
-      if (!key) continue;
-      if (!isDiatonicPitch(note.pitch, key)) {
-        diags.push({
-          severity: 'info',
-          type: 'out-of-scale',
-          message: `${pitchLabel(note.pitch, key)} is not in ${key.root} ${key.mode}`,
-          noteIds: [note.id],
-          beat: note.startBeat,
-        });
-      }
+  for (const note of song.notes) {
+    const key = keyAtBeat(song, note.startBeat);
+    if (!isDiatonicPitch(note.pitch, key)) {
+      diags.push({
+        severity: 'info',
+        type: 'out-of-scale',
+        message: `${pitchLabel(note.pitch, key)} is not in ${key.root} ${key.mode}`,
+        noteIds: [note.id],
+        beat: note.startBeat,
+      });
     }
   }
 

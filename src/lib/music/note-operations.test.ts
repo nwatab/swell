@@ -10,11 +10,11 @@ import type { Song, KeySignature } from '../../types/song';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+const C_MAJOR: KeySignature = { root: 'C', mode: 'major' };
 const BASE: Song = {
   version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], streams: [],
+  globalKey: C_MAJOR,
 };
-const C_MAJOR: KeySignature = { root: 'C', mode: 'major' };
-const SONG_WITH_KEY: Song = { ...BASE, globalKey: C_MAJOR };
 
 // ── addNote ───────────────────────────────────────────────────────────────────
 
@@ -32,14 +32,9 @@ describe('addNote', () => {
     expect(BASE.notes).toHaveLength(0);
   });
 
-  it('assigns spelledPitch when key is set', () => {
-    const result = addNote(SONG_WITH_KEY, 60, 0);
-    expect(result.notes[0].spelledPitch).toEqual({ letter: 'C', accidental: 0, octave: 4 });
-  });
-
-  it('does not assign spelledPitch without key', () => {
+  it('always assigns spelledPitch', () => {
     const result = addNote(BASE, 60, 0);
-    expect(result.notes[0].spelledPitch).toBeUndefined();
+    expect(result.notes[0].spelledPitch).toEqual({ letter: 'C', accidental: 0, octave: 4 });
   });
 
   it('assigns the given streamId', () => {
@@ -97,7 +92,7 @@ describe('moveNote', () => {
   });
 
   it('re-annotates spelledPitch on move', () => {
-    const song = addNote(SONG_WITH_KEY, 60, 0);
+    const song = addNote(BASE, 60, 0);
     const id = song.notes[0].id;
     const result = moveNote(song, id, 0, 62); // D4
     expect(result.notes[0].spelledPitch).toEqual({ letter: 'D', accidental: 0, octave: 4 });
@@ -134,8 +129,8 @@ describe('addChord', () => {
     expect(result.notes[0].pitch).toBe(60);
   });
 
-  it('assigns spelledPitch when key is set', () => {
-    const result = addChord(SONG_WITH_KEY, 60, 0, 1, MAJ_INTERVALS);
+  it('always assigns spelledPitch', () => {
+    const result = addChord(BASE, 60, 0, 1, MAJ_INTERVALS);
     expect(result.notes.every(n => n.spelledPitch !== undefined)).toBe(true);
   });
 

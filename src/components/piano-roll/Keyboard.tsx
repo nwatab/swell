@@ -15,7 +15,7 @@ import {
   HEADER_H,
 } from './layout';
 
-function WhiteKey({ pitch, idx, globalKey }: { pitch: number; idx: number; globalKey: KeySignature | null }) {
+function WhiteKey({ pitch, idx, globalKey }: { pitch: number; idx: number; globalKey: KeySignature }) {
   const roman = romanNumeral(pitch, globalKey);
   return (
     <div
@@ -28,7 +28,7 @@ function WhiteKey({ pitch, idx, globalKey }: { pitch: number; idx: number; globa
   );
 }
 
-function BlackKey({ pitch, globalKey }: { pitch: number; globalKey: KeySignature | null }) {
+function BlackKey({ pitch, globalKey }: { pitch: number; globalKey: KeySignature }) {
   const roman = romanNumeral(pitch, globalKey);
   return (
     <div
@@ -41,7 +41,7 @@ function BlackKey({ pitch, globalKey }: { pitch: number; globalKey: KeySignature
 }
 
 interface KeyboardProps {
-  globalKey: KeySignature | null;
+  globalKey: KeySignature;
 }
 
 export default function Keyboard({ globalKey }: KeyboardProps) {
