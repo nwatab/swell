@@ -23,7 +23,6 @@ The song uses this format:
       "durationBeats": number,
       "velocity": number,
       "spelledPitch": { "letter": "C"|"D"|"E"|"F"|"G"|"A"|"B", "accidental": -1|0|1, "octave": number } (optional),
-      "isDiatonic": boolean (optional),
       "streamId": string (optional)
     }
   ]

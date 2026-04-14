@@ -1,17 +1,19 @@
 import type { Note, Song, KeySignature } from '../../types/song';
-import { keyAtBeat, spellMidi, isDiatonicPitch } from '../harmony';
+import { keyAtBeat, spellMidi } from '../harmony';
 import { genId } from '../id';
 
 export const MAX_PITCH = 84; // C6
 
+/**
+ * Compute the spelling annotation for a note in a key context.
+ * isDiatonic (scale membership) is derivable from spelledPitch + key at any
+ * time and is intentionally NOT stored on Note. See ADR-001, ADR-007.
+ */
 export const annotateNote = (
   pitch: number,
-  startBeat: number,
   key: KeySignature | null,
-): { spelledPitch?: ReturnType<typeof spellMidi>; isDiatonic?: boolean } =>
-  key
-    ? { spelledPitch: spellMidi(pitch, key), isDiatonic: isDiatonicPitch(pitch, key) }
-    : {};
+): { spelledPitch?: ReturnType<typeof spellMidi> } =>
+  key ? { spelledPitch: spellMidi(pitch, key) } : {};
 
 // Find the nearest chord tone strictly above `abovePitch`
 export const findNextChordTone = (
@@ -51,7 +53,7 @@ export const spreadChordAcrossStreams = (
         return {
           id: genId(),
           pitch,
-          ...annotateNote(pitch, startBeat, key),
+          ...annotateNote(pitch, key),
           startBeat,
           durationBeats,
           velocity: 100,
@@ -74,7 +76,7 @@ export const addNote = (
     ...song,
     notes: [
       ...song.notes,
-      { id: genId(), pitch, ...annotateNote(pitch, startBeat, key), startBeat, durationBeats, velocity: 100, streamId },
+      { id: genId(), pitch, ...annotateNote(pitch, key), startBeat, durationBeats, velocity: 100, streamId },
     ],
   };
 };
@@ -97,7 +99,7 @@ export const addChord = (
         return {
           id: genId(),
           pitch,
-          ...annotateNote(pitch, startBeat, key),
+          ...annotateNote(pitch, key),
           startBeat,
           durationBeats,
           velocity: 100,
@@ -118,6 +120,6 @@ export const moveNote = (song: Song, id: string, startBeat: number, pitch: numbe
   notes: song.notes.map(n => {
     if (n.id !== id) return n;
     const key = keyAtBeat(song, startBeat);
-    return { ...n, startBeat, pitch, ...annotateNote(pitch, startBeat, key) };
+    return { ...n, startBeat, pitch, ...annotateNote(pitch, key) };
   }),
 });

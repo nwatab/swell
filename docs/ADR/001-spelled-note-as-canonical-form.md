@@ -36,6 +36,15 @@ MIDI pitch は `spelledPitchToMidi(sp)` で常に導出する。
 - ピアノロールの表示で正しい臨時記号を出せる
 - isDiatonic, pitch などの冗長フィールドが不要になる（導出可能）
 
+**isDiatonic の除去（実装済み）:**
+
+`isDiatonic` という語には2つの意味があった:
+
+1. **Scale membership（音階所属）**: ある音が現在の調のスケールに含まれるか。`spelledPitch + key` から常に計算可能 → `Note` フィールドとして保持する意味がない。**除去済み。**
+2. **Harmonic function（和声機能）**: コードトーン、経過音、刺繍音などの機能。現在のビートにおける和声文脈を解析して初めて判定できる → Analytical layer の出力であり `Note` フィールドには不適切。**ADR-007 を参照。**
+
+`isDiatonic`（意味1）は `Note` から削除され、必要な場所では `isDiatonicPitch(note.pitch, key)` として都度計算する。
+
 **コスト:**
 
 - MIDI インポート時に pitch spelling problem（MIDI整数 → SpelledNote の推定）が発生する。

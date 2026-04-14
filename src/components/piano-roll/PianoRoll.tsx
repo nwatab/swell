@@ -37,7 +37,7 @@ export default function PianoRoll() {
   const { suggestion, handleAgentSubmit, handleAccept, handleReject } = useAgentSuggestion(song, setSong);
   const { musicGen, handleMusicGenToggle, handleMusicGen, closeMusicGen } = useMusicGen();
   const { cellW, zoomIn, zoomOut, canZoomIn, canZoomOut } = useZoom();
-  const diagnostics = useDiagnostics(song);
+  const { diagnostics } = useDiagnostics(song);
 
   const activeSong = suggestion.status === 'ready' ? suggestion.suggestedSong : song;
   const { playing, playhead, togglePlay } = usePlayback(activeSong);

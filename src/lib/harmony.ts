@@ -309,6 +309,59 @@ export const spelledPitchToString = ({ letter, accidental, octave }: SpelledPitc
   return `${letter}${sym}${octave}`;
 };
 
+// ── Note function (harmonic role) ────────────────────────────────────────────
+//
+// Distinct from scale membership (isDiatonic / meaning-1).
+// This is the harmonic function of a note in context — Analytical layer output.
+// NOT stored on Note; produced by computeNoteFunctions() and held separately.
+// See ADR-007.
+
+export type NoteFunction =
+  | 'chord_tone'    // constitutes a harmonic interval with simultaneous notes
+  | 'passing_tone'  // stepwise motion between chord tones
+  | 'neighbor_tone' // leaves and returns to the same pitch
+  | 'suspension'    // held over from previous harmony, resolves by step
+  | 'appoggiatura'  // leap to dissonance, resolves by step
+  | 'chromatic'     // non-diatonic with no identifiable tonal function
+  | 'unanalyzed';   // insufficient context for classification
+
+export type NoteFunctionMap = ReadonlyMap<string, NoteFunction>;
+
+/**
+ * Classify the harmonic function of every note in the song.
+ *
+ * Current implementation: initial heuristics only.
+ *   - chord_tone:  note overlaps (in time) with at least one other note
+ *   - chromatic:   non-diatonic note with no simultaneous companion
+ *   - unanalyzed:  everything else (diatonic, isolated)
+ *
+ * Passing tone / neighbor tone / suspension detection is planned but not yet
+ * implemented (requires voice-leading analysis across consecutive chords).
+ */
+export const computeNoteFunctions = (song: Song): NoteFunctionMap => {
+  const result = new Map<string, NoteFunction>();
+
+  for (const note of song.notes) {
+    const hasSibling = song.notes.some(
+      other =>
+        other.id !== note.id &&
+        other.startBeat < note.startBeat + note.durationBeats &&
+        note.startBeat < other.startBeat + other.durationBeats,
+    );
+
+    let fn: NoteFunction;
+    if (hasSibling) {
+      fn = 'chord_tone';
+    } else {
+      const key = keyAtBeat(song, note.startBeat);
+      fn = key && !isDiatonicPitch(note.pitch, key) ? 'chromatic' : 'unanalyzed';
+    }
+    result.set(note.id, fn);
+  }
+
+  return result;
+};
+
 // ── Diagnostic types ──────────────────────────────────────────────────────────
 
 export type DiagnosticSeverity = 'error' | 'warning' | 'info';

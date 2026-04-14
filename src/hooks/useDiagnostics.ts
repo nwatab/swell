@@ -2,8 +2,16 @@
 
 import { useMemo } from 'react';
 import type { Song } from '../types/song';
-import { analyzeHarmony } from '../lib/harmony';
-import type { Diagnostic } from '../lib/harmony';
+import { analyzeHarmony, computeNoteFunctions } from '../lib/harmony';
+import type { Diagnostic, NoteFunctionMap } from '../lib/harmony';
 
-export const useDiagnostics = (song: Song): readonly Diagnostic[] =>
-  useMemo(() => analyzeHarmony(song), [song]);
+export interface DiagnosticsResult {
+  readonly diagnostics: readonly Diagnostic[];
+  readonly noteFunctions: NoteFunctionMap;
+}
+
+export const useDiagnostics = (song: Song): DiagnosticsResult =>
+  useMemo(() => ({
+    diagnostics: analyzeHarmony(song),
+    noteFunctions: computeNoteFunctions(song),
+  }), [song]);

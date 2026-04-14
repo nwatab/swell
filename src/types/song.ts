@@ -55,8 +55,6 @@ export interface Note {
    * reversible (originalMidi → pitch → originalMidi on inverse transform).
    */
   readonly originalMidi?: number;
-  /** Whether pitch is diatonic in the active key at startBeat. */
-  readonly isDiatonic?: boolean;
   readonly startBeat: number;
   readonly durationBeats: number;
   readonly velocity: number;    // 0–127

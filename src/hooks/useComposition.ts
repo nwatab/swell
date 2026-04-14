@@ -55,7 +55,7 @@ export const useComposition = (): UseCompositionReturn => {
         ...songWithNewKey,
         notes: transformedNotes.map(n => ({
           ...n,
-          ...annotateNote(n.pitch, n.startBeat, keyAtBeat(songWithNewKey, n.startBeat)),
+          ...annotateNote(n.pitch, keyAtBeat(songWithNewKey, n.startBeat)),
         })),
       };
     });
