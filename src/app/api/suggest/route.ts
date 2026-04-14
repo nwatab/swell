@@ -13,8 +13,19 @@ The song uses this format:
   "bpm": number,
   "beatsPerMeasure": number (usually 4),
   "totalBeats": number,
+  "globalKey": { "root": "C"|"C#"|"D"|...|"B", "mode": "major"|"minor" } (optional),
+  "modulations": [ { "beat": number, "key": { "root": ..., "mode": ... } } ] (optional),
   "notes": [
-    { "id": string, "pitch": number, "startBeat": number, "durationBeats": number, "velocity": number }
+    {
+      "id": string,
+      "pitch": number,        // MIDI (required)
+      "startBeat": number,
+      "durationBeats": number,
+      "velocity": number,
+      "spelledPitch": { "letter": "C"|"D"|"E"|"F"|"G"|"A"|"B", "accidental": -1|0|1, "octave": number } (optional),
+      "isDiatonic": boolean (optional),
+      "streamId": string (optional)
+    }
   ]
 }
 

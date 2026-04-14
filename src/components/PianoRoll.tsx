@@ -1,12 +1,25 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { playSong } from '../lib/audio';
-import type { Note, Song, Stream } from '../types/song';
-import { DEFAULT_SONG } from '../types/song';
+import type { Note, Song, Stream, KeySignature } from '../types/song';
+import { DEFAULT_SONG, PITCH_CLASS_NAMES } from '../types/song';
+import {
+  keyAtBeat,
+  spellMidi,
+  isDiatonicPitch,
+  getScaleDegree,
+  romanNumeral,
+  analyzeHarmony,
+  spelledPitchToString,
+  getDiatonicChordIntervals,
+  applyKeyTransform,
+  snapToDiatonic,
+} from '../lib/harmony';
+import type { Diagnostic } from '../lib/harmony';
 
 // ── Piano constants ─────────────────────────────────────────────────────────
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTE_NAMES = PITCH_CLASS_NAMES;
 const BLACK_SEMITONES = new Set([1, 3, 6, 8, 10]);
 
 const isBlack = (pitch: number) => BLACK_SEMITONES.has(pitch % 12);
@@ -78,7 +91,12 @@ const parseSwell = (text: string): Song => {
   if (typeof d.bpm !== 'number' || typeof d.beatsPerMeasure !== 'number' || typeof d.totalBeats !== 'number')
     throw new Error('Invalid song format');
   if (!Array.isArray(d.notes)) throw new Error('Invalid notes');
-  return { ...d, streams: Array.isArray(d.streams) ? d.streams : [] } as Song;
+  return {
+    ...d,
+    streams: Array.isArray(d.streams) ? d.streams : [],
+    globalKey: d.globalKey ?? undefined,
+    modulations: Array.isArray(d.modulations) ? d.modulations : undefined,
+  } as Song;
 };
 
 const downloadSwell = (song: Song) => {
@@ -103,9 +121,10 @@ const snapBeat = (rawBeat: number, resolution: number): number =>
   Math.round(rawBeat / resolution) * resolution;
 
 // ── Chord helpers ─────────────────────────────────────────────────────────────
-type ChordType = 'note' | 'maj' | 'min' | 'maj7' | 'min7';
+// 'dia' / 'dia7' → diatonic triad / seventh; intervals depend on key + scale degree.
+type ChordType = 'note' | 'maj' | 'min' | 'maj7' | 'min7' | 'dia' | 'dia7';
 
-const CHORD_INTERVALS: Record<ChordType, readonly number[]> = {
+const CHORD_INTERVALS: Record<Exclude<ChordType, 'dia' | 'dia7'>, readonly number[]> = {
   note: [0],
   maj:  [0, 4, 7],
   min:  [0, 3, 7],
@@ -114,39 +133,17 @@ const CHORD_INTERVALS: Record<ChordType, readonly number[]> = {
 };
 
 const CHORD_LABELS: Record<ChordType, string> = {
-  note: '—',
-  maj:  'Maj',
-  min:  'Min',
-  maj7: 'Maj7',
-  min7: 'Min7',
+  note:  '—',
+  maj:   'Maj',
+  min:   'Min',
+  maj7:  'Maj7',
+  min7:  'Min7',
+  dia:   'Dia',
+  dia7:  'Dia7',
 };
 
 // ── Scale / Roman numeral helpers ────────────────────────────────────────────
-type RootNote = 'C' | 'C#' | 'D' | 'D#' | 'E' | 'F' | 'F#' | 'G' | 'G#' | 'A' | 'A#' | 'B';
-type ScaleMode = 'major' | 'minor';
-type GlobalKey = { root: RootNote; mode: ScaleMode } | null;
-
-const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11] as const;
-const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10] as const;
-const ROMAN_NUMERALS: Record<ScaleMode, readonly string[]> = {
-  major: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'],
-  minor: ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii'],
-};
-
-const getScaleDegree = (pitch: number, key: GlobalKey): number | null => {
-  if (!key) return null;
-  const rootIdx = NOTE_NAMES.indexOf(key.root);
-  const intervals = key.mode === 'major' ? MAJOR_INTERVALS : MINOR_INTERVALS;
-  const semitone = ((pitch % 12) - rootIdx + 12) % 12;
-  const idx = (intervals as readonly number[]).indexOf(semitone);
-  return idx === -1 ? null : idx;
-};
-
-const romanNumeral = (pitch: number, key: GlobalKey): string | null => {
-  const degree = getScaleDegree(pitch, key);
-  if (degree === null || !key) return null;
-  return ROMAN_NUMERALS[key.mode][degree];
-};
+// (implemented in lib/harmony.ts; imported above)
 
 // ── Stream helpers ────────────────────────────────────────────────────────────
 const STREAM_COLORS = [
@@ -190,6 +187,16 @@ const applySATB = (song: Song): Song => ({
   streams: SATB_NAMES.map((name, i) => ({ id: genId(), name, color: SATB_COLORS[i] })),
 });
 
+// ── Note annotation helper ────────────────────────────────────────────────────
+const annotateNote = (
+  pitch: number,
+  startBeat: number,
+  key: KeySignature | null,
+): { spelledPitch?: ReturnType<typeof spellMidi>; isDiatonic?: boolean } =>
+  key
+    ? { spelledPitch: spellMidi(pitch, key), isDiatonic: isDiatonicPitch(pitch, key) }
+    : {};
+
 // Find the nearest chord tone strictly above `abovePitch`
 const findNextChordTone = (abovePitch: number, intervals: readonly number[], rootPitch: number): number => {
   const rootClass = rootPitch % 12;
@@ -218,23 +225,27 @@ const spreadChordAcrossStreams = (
     ...song,
     notes: [
       ...song.notes,
-      ...streams.map((stream, i) => ({
-        id: genId(),
-        pitch: pitches[i],
-        startBeat,
-        durationBeats,
-        velocity: 100,
-        streamId: stream.id,
-      })),
+      ...streams.map((stream, i) => {
+        const pitch = pitches[i];
+        const key = keyAtBeat(song, startBeat);
+        return { id: genId(), pitch, ...annotateNote(pitch, startBeat, key), startBeat, durationBeats, velocity: 100, streamId: stream.id };
+      }),
     ],
   };
 };
 
 // ── Song state helpers ───────────────────────────────────────────────────────
-const addNote = (song: Song, pitch: number, startBeat: number, durationBeats = 1, streamId?: string): Song => ({
-  ...song,
-  notes: [...song.notes, { id: genId(), pitch, startBeat, durationBeats, velocity: 100, streamId }],
-});
+
+const addNote = (song: Song, pitch: number, startBeat: number, durationBeats = 1, streamId?: string): Song => {
+  const key = keyAtBeat(song, startBeat);
+  return {
+    ...song,
+    notes: [
+      ...song.notes,
+      { id: genId(), pitch, ...annotateNote(pitch, startBeat, key), startBeat, durationBeats, velocity: 100, streamId },
+    ],
+  };
+};
 
 const addChord = (
   song: Song,
@@ -243,20 +254,19 @@ const addChord = (
   durationBeats: number,
   intervals: readonly number[],
   streamId?: string,
-): Song => ({
-  ...song,
-  notes: [
-    ...song.notes,
-    ...intervals.map(interval => ({
-      id: genId(),
-      pitch: rootPitch + interval,
-      startBeat,
-      durationBeats,
-      velocity: 100,
-      streamId,
-    })),
-  ],
-});
+): Song => {
+  const key = keyAtBeat(song, startBeat);
+  return {
+    ...song,
+    notes: [
+      ...song.notes,
+      ...intervals.map(interval => {
+        const pitch = rootPitch + interval;
+        return { id: genId(), pitch, ...annotateNote(pitch, startBeat, key), startBeat, durationBeats, velocity: 100, streamId };
+      }),
+    ],
+  };
+};
 
 const removeNote = (song: Song, id: string): Song => ({
   ...song,
@@ -265,7 +275,11 @@ const removeNote = (song: Song, id: string): Song => ({
 
 const moveNote = (song: Song, id: string, startBeat: number, pitch: number): Song => ({
   ...song,
-  notes: song.notes.map(n => n.id === id ? { ...n, startBeat, pitch } : n),
+  notes: song.notes.map(n => {
+    if (n.id !== id) return n;
+    const key = keyAtBeat(song, startBeat);
+    return { ...n, startBeat, pitch, ...annotateNote(pitch, startBeat, key) };
+  }),
 });
 
 // ── Diff helpers ─────────────────────────────────────────────────────────────
@@ -311,7 +325,7 @@ type MusicGenState =
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function WhiteKey({ pitch, idx, globalKey }: { pitch: number; idx: number; globalKey: GlobalKey }) {
+function WhiteKey({ pitch, idx, globalKey }: { pitch: number; idx: number; globalKey: KeySignature | null }) {
   const roman = romanNumeral(pitch, globalKey);
   return (
     <div
@@ -324,7 +338,7 @@ function WhiteKey({ pitch, idx, globalKey }: { pitch: number; idx: number; globa
   );
 }
 
-function BlackKey({ pitch, globalKey }: { pitch: number; globalKey: GlobalKey }) {
+function BlackKey({ pitch, globalKey }: { pitch: number; globalKey: KeySignature | null }) {
   const roman = romanNumeral(pitch, globalKey);
   return (
     <div
@@ -376,9 +390,14 @@ function NoteBlock({
     variant === 'dragging'? { backgroundColor: color, borderColor: color, opacity: 0.8 } :
                             { backgroundColor: color, borderColor: color };
 
+  const label = note.spelledPitch
+    ? spelledPitchToString(note.spelledPitch)
+    : `${NOTE_NAMES[note.pitch % 12]}${Math.floor(note.pitch / 12) - 1}`;
+
   return (
     <div
       className="absolute rounded-sm border pointer-events-none"
+      title={label}
       style={{
         left: note.startBeat * cellW + 1,
         top: pitchY(note.pitch) + 2,
@@ -582,8 +601,8 @@ function TransportBar({
   canZoomOut: boolean;
   chordType: ChordType;
   onChordTypeChange: (ct: ChordType) => void;
-  globalKey: GlobalKey;
-  onGlobalKeyChange: (key: GlobalKey) => void;
+  globalKey: KeySignature | null;
+  onGlobalKeyChange: (key: KeySignature | null) => void;
 }) {
   const measure = Math.floor(beat / 4) + 1;
   const beatInMeasure = Math.floor(beat % 4) + 1;
@@ -675,20 +694,25 @@ function TransportBar({
         </button>
       </div>
       <div className="flex items-center gap-1">
-        {(Object.keys(CHORD_LABELS) as ChordType[]).map(ct => (
-          <button
-            key={ct}
-            onClick={() => onChordTypeChange(ct)}
-            className={[
-              'px-2 py-1 rounded text-xs transition-colors font-mono',
-              chordType === ct
-                ? 'bg-amber-600 text-white'
-                : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
-            ].join(' ')}
-          >
-            {CHORD_LABELS[ct]}
-          </button>
-        ))}
+        {(Object.keys(CHORD_LABELS) as ChordType[]).map(ct => {
+          const isDia = ct === 'dia' || ct === 'dia7';
+          const active = chordType === ct;
+          return (
+            <button
+              key={ct}
+              onClick={() => onChordTypeChange(ct)}
+              title={isDia ? 'Diatonic chord (requires key to be set)' : undefined}
+              className={[
+                'px-2 py-1 rounded text-xs transition-colors font-mono',
+                active
+                  ? isDia ? 'bg-teal-600 text-white' : 'bg-amber-600 text-white'
+                  : isDia ? 'bg-zinc-700 hover:bg-zinc-600 text-teal-400' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
+              ].join(' ')}
+            >
+              {CHORD_LABELS[ct]}
+            </button>
+          );
+        })}
       </div>
       <label className="flex items-center gap-1 text-xs text-zinc-400">
         Key
@@ -697,8 +721,8 @@ function TransportBar({
           onChange={e => {
             if (!e.target.value) { onGlobalKeyChange(null); return; }
             const sep = e.target.value.lastIndexOf('-');
-            const root = e.target.value.slice(0, sep) as RootNote;
-            const mode = e.target.value.slice(sep + 1) as ScaleMode;
+            const root = e.target.value.slice(0, sep) as KeySignature['root'];
+            const mode = e.target.value.slice(sep + 1) as KeySignature['mode'];
             onGlobalKeyChange({ root, mode });
           }}
           className="bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-zinc-200 text-xs"
@@ -912,6 +936,85 @@ function AgentBar({
   );
 }
 
+// ── Problems panel ───────────────────────────────────────────────────────────
+
+const SEVERITY_ICON: Record<Diagnostic['severity'], string> = {
+  error:   '●',
+  warning: '▲',
+  info:    'ℹ',
+};
+
+const SEVERITY_COLOR: Record<Diagnostic['severity'], string> = {
+  error:   'text-red-400',
+  warning: 'text-yellow-400',
+  info:    'text-blue-400',
+};
+
+function ProblemsPanel({
+  diagnostics,
+  open,
+  onToggle,
+}: {
+  diagnostics: readonly Diagnostic[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const errors   = diagnostics.filter(d => d.severity === 'error').length;
+  const warnings = diagnostics.filter(d => d.severity === 'warning').length;
+  const infos    = diagnostics.filter(d => d.severity === 'info').length;
+
+  return (
+    <div className="flex-shrink-0 border-t border-zinc-700 bg-zinc-900">
+      {/* Header bar */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 transition-colors"
+      >
+        <span className="font-medium text-zinc-300">Problems</span>
+        {errors > 0 && (
+          <span className="flex items-center gap-1 text-red-400">
+            <span>●</span>{errors}
+          </span>
+        )}
+        {warnings > 0 && (
+          <span className="flex items-center gap-1 text-yellow-400">
+            <span>▲</span>{warnings}
+          </span>
+        )}
+        {infos > 0 && (
+          <span className="flex items-center gap-1 text-blue-400">
+            <span>ℹ</span>{infos}
+          </span>
+        )}
+        {diagnostics.length === 0 && <span className="text-zinc-600">No issues</span>}
+        <span className="ml-auto text-zinc-600">{open ? '▾' : '▸'}</span>
+      </button>
+
+      {/* List */}
+      {open && (
+        <div className="max-h-40 overflow-y-auto border-t border-zinc-800">
+          {diagnostics.length === 0 ? (
+            <div className="px-4 py-3 text-xs text-zinc-600">No harmony issues detected.</div>
+          ) : (
+            diagnostics.map((d, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-2 px-4 py-1.5 text-xs border-b border-zinc-800 last:border-0 hover:bg-zinc-800"
+              >
+                <span className={`flex-shrink-0 mt-px ${SEVERITY_COLOR[d.severity]}`}>
+                  {SEVERITY_ICON[d.severity]}
+                </span>
+                <span className="text-zinc-300 flex-1">{d.message}</span>
+                <span className="flex-shrink-0 text-zinc-600 font-mono">beat {d.beat + 1}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function PianoRoll() {
@@ -981,8 +1084,34 @@ export default function PianoRoll() {
   // ── Chord mode ────────────────────────────────────────────────────────────
   const [chordType, setChordType] = useState<ChordType>('note');
 
-  // ── Global key ────────────────────────────────────────────────────────────
-  const [globalKey, setGlobalKey] = useState<GlobalKey>(null);
+  // ── Global key (stored in Song for serialization) ─────────────────────────
+  const globalKey = song.globalKey ?? null;
+  const setGlobalKey = useCallback((newKey: KeySignature | null) => {
+    setSong(s => {
+      const oldKey = s.globalKey ?? null;
+      const songWithNewKey = { ...s, globalKey: newKey ?? undefined };
+
+      // Remap diatonic notes so each keeps its scale degree in the new key.
+      // Applies to any key change (root change, mode change, or both).
+      const transformedNotes =
+        oldKey && newKey
+          ? applyKeyTransform(s.notes, oldKey, newKey)
+          : s.notes;
+
+      // Re-annotate all notes with the new key context.
+      return {
+        ...songWithNewKey,
+        notes: transformedNotes.map(n => ({
+          ...n,
+          ...annotateNote(n.pitch, n.startBeat, keyAtBeat(songWithNewKey, n.startBeat)),
+        })),
+      };
+    });
+  }, []);
+
+  // ── Harmony diagnostics ───────────────────────────────────────────────────
+  const diagnostics = useMemo(() => analyzeHarmony(song), [song]);
+  const [problemsOpen, setProblemsOpen] = useState(false);
 
   // ── Streams ───────────────────────────────────────────────────────────────
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
@@ -1090,14 +1219,33 @@ export default function PianoRoll() {
         });
       } else {
         const snapped = Math.max(0, Math.min(song.totalBeats - resolution, snapBeat(rawBeat, resolution)));
-        if (spreadChord && chordType !== 'note' && song.streams.length >= 2) {
-          setSong(s => spreadChordAcrossStreams(s, pitch, snapped, resolution, CHORD_INTERVALS[chordType]));
+
+        // Resolve chord intervals: diatonic types depend on the active key.
+        const isDia = chordType === 'dia' || chordType === 'dia7';
+        let intervals: readonly number[];
+        let rootPitch = pitch; // may be snapped for diatonic mode
+        if (isDia) {
+          const key = keyAtBeat(song, snapped);
+          if (key) {
+            // Snap chromatic pitches to the nearest diatonic note so Dia mode
+            // always produces a chord even when the user clicks a black key.
+            rootPitch = snapToDiatonic(pitch, key);
+            intervals = getDiatonicChordIntervals(rootPitch, key, chordType === 'dia7') ?? [0];
+          } else {
+            intervals = [0]; // no key set — single note fallback
+          }
         } else {
-          setSong(s => addChord(s, pitch, snapped, resolution, CHORD_INTERVALS[chordType], activeStreamId ?? undefined));
+          intervals = CHORD_INTERVALS[chordType];
+        }
+
+        if (spreadChord && intervals.length > 1 && song.streams.length >= 2) {
+          setSong(s => spreadChordAcrossStreams(s, rootPitch, snapped, resolution, intervals));
+        } else {
+          setSong(s => addChord(s, rootPitch, snapped, resolution, intervals, activeStreamId ?? undefined));
         }
       }
     },
-    [song.notes, song.totalBeats, suggestion.status, resolution, cellW, chordType, activeStreamId, spreadChord, song.streams.length]
+    [song, suggestion.status, resolution, cellW, chordType, activeStreamId, spreadChord]
   );
 
   // ── Agent suggestion ───────────────────────────────────────────────────────
@@ -1335,6 +1483,13 @@ export default function PianoRoll() {
         onSubmit={handleAgentSubmit}
         onAccept={handleAccept}
         onReject={handleReject}
+      />
+
+      {/* Harmony diagnostics */}
+      <ProblemsPanel
+        diagnostics={diagnostics}
+        open={problemsOpen}
+        onToggle={() => setProblemsOpen(v => !v)}
       />
     </div>
   );
