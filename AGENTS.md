@@ -3,7 +3,6 @@
 ## Stack Constraints
 
 - Framework: Next.js (App Router)
-- Audio playback: Tone.js のみ。Web Audio API を直接叩くな
 - Music theory logic: Tonal.js のみ。音程計算・スケール生成を独自実装するな
 - Notation rendering: VexFlow のみ
 - LLM calls: Claude API（claude-sonnet-4-20250514）経由のみ

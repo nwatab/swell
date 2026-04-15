@@ -54,7 +54,6 @@ src/
 │   │   └── note-operations.ts
 │   ├── swell-format/        # Import/Export
 │   ├── harmony.ts           # 和声分析（既存）
-│   ├── audio.ts             # Tone.js再生（既存）
 │   ├── snap.ts
 │   └── diff.ts
 └── types/
@@ -80,6 +79,5 @@ PianoRoll.tsxの分割を `docs/REFACTORING-PLAN.md` に従い進行中。
 
 ## Dev Notes
 
-- ブラウザ内試聴はTone.jsで実装済み
 - LLMへの楽譜情報の渡し方は未確定（ADR-005）
 - MusicGen統合は試行したが conditioning精度に課題あり
