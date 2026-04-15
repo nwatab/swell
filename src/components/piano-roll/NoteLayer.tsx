@@ -1,13 +1,13 @@
 'use client';
 
-import type { Note, Song } from '../../types/song';
+import type { Note, Composition } from '../../types/song';
 import type { SuggestionState, DragState } from '../../types/ui-state';
 import { MIN_PITCH, MAX_PITCH } from './layout';
 import NoteBlock, { type NoteVariant } from './NoteBlock';
 
 interface NoteLayerProps {
-  song: Song;
-  activeSong: Song;
+  composition: Composition;
+  activeComposition: Composition;
   suggestion: SuggestionState;
   drag: DragState | null;
   cellW: number;
@@ -15,7 +15,7 @@ interface NoteLayerProps {
 
 type NoteEntry = { note: Note; variant: NoteVariant };
 
-export default function NoteLayer({ song, activeSong, suggestion, drag, cellW }: NoteLayerProps) {
+export default function NoteLayer({ composition, activeComposition, suggestion, drag, cellW }: NoteLayerProps) {
   const baseNotes: NoteEntry[] =
     suggestion.status === 'ready'
       ? [
@@ -23,14 +23,14 @@ export default function NoteLayer({ song, activeSong, suggestion, drag, cellW }:
           ...suggestion.diff.removed.map(note => ({ note, variant: 'removed' as const })),
           ...suggestion.diff.added.map(note => ({ note, variant: 'added' as const })),
         ]
-      : song.notes.map(note => ({ note, variant: 'normal' as const }));
+      : composition.notes.map(note => ({ note, variant: 'normal' as const }));
 
   const displayNotes: NoteEntry[] = drag
     ? [
         ...baseNotes.filter(({ note }) => note.id !== drag.noteId),
         {
           note: {
-            ...song.notes.find(n => n.id === drag.noteId)!,
+            ...composition.notes.find(n => n.id === drag.noteId)!,
             startBeat: drag.previewBeat,
             pitch: drag.previewPitch,
           },
@@ -43,9 +43,9 @@ export default function NoteLayer({ song, activeSong, suggestion, drag, cellW }:
     <>
       {displayNotes.map(({ note, variant }) => {
         if (note.pitch < MIN_PITCH || note.pitch > MAX_PITCH) return null;
-        const streamColor =
+        const trackColor =
           variant === 'normal' || variant === 'dragging'
-            ? activeSong.streams.find(s => s.id === note.streamId)?.color
+            ? activeComposition.tracks.find(s => s.id === note.partId)?.color
             : undefined;
         return (
           <NoteBlock
@@ -53,7 +53,7 @@ export default function NoteLayer({ song, activeSong, suggestion, drag, cellW }:
             note={note}
             cellW={cellW}
             variant={variant}
-            streamColor={streamColor}
+            trackColor={trackColor}
           />
         );
       })}

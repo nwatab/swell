@@ -10,7 +10,8 @@ import {
   getDiatonicChordIntervals,
   analyzeHarmony,
 } from './harmony';
-import type { KeySignature, Note, Song } from '../types/song';
+import type { KeySignature, Note, Composition } from '../types/song';
+import { genId } from './id';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -21,18 +22,18 @@ const C_MINOR:  KeySignature = { root: 'C',  mode: 'minor' };
 const A_MINOR:  KeySignature = { root: 'A',  mode: 'minor' };
 const CS_MAJOR: KeySignature = { root: 'C#', mode: 'major' };
 
-const BASE_SONG: Song = {
-  version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], streams: [],
-  globalKey: C_MAJOR,
+const BASE_COMPOSITION: Composition = {
+  id: genId(), version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], tracks: [],
+  parts: [], globalKey: C_MAJOR,
 };
 
 const note = (
   id: string,
   pitch: number,
   startBeat: number,
-  streamId?: string,
+  partId?: string,
   duration = 1,
-): Note => ({ id, pitch, startBeat, durationBeats: duration, velocity: 100, streamId });
+): Note => ({ id, pitch, startBeat, durationBeats: duration, velocity: 100, partId });
 
 // ── isDiatonicPitch ───────────────────────────────────────────────────────────
 
@@ -190,44 +191,44 @@ describe('snapToDiatonic', () => {
 
 describe('keyAtBeat', () => {
   it('returns globalKey when no modulations', () => {
-    const song = { ...BASE_SONG, globalKey: C_MAJOR };
-    expect(keyAtBeat(song, 0)).toEqual(C_MAJOR);
-    expect(keyAtBeat(song, 16)).toEqual(C_MAJOR);
+    const comp = { ...BASE_COMPOSITION, globalKey: C_MAJOR };
+    expect(keyAtBeat(comp, 0)).toEqual(C_MAJOR);
+    expect(keyAtBeat(comp, 16)).toEqual(C_MAJOR);
   });
 
   it('returns globalKey before first modulation', () => {
-    const song = {
-      ...BASE_SONG,
+    const comp = {
+      ...BASE_COMPOSITION,
       globalKey: C_MAJOR,
       modulations: [{ beat: 8, key: G_MAJOR }],
     };
-    expect(keyAtBeat(song, 0)).toEqual(C_MAJOR);
-    expect(keyAtBeat(song, 7)).toEqual(C_MAJOR);
+    expect(keyAtBeat(comp, 0)).toEqual(C_MAJOR);
+    expect(keyAtBeat(comp, 7)).toEqual(C_MAJOR);
   });
 
   it('returns modulation key from its beat onward', () => {
-    const song = {
-      ...BASE_SONG,
+    const comp = {
+      ...BASE_COMPOSITION,
       globalKey: C_MAJOR,
       modulations: [{ beat: 8, key: G_MAJOR }],
     };
-    expect(keyAtBeat(song, 8)).toEqual(G_MAJOR);
-    expect(keyAtBeat(song, 16)).toEqual(G_MAJOR);
+    expect(keyAtBeat(comp, 8)).toEqual(G_MAJOR);
+    expect(keyAtBeat(comp, 16)).toEqual(G_MAJOR);
   });
 
   it('picks the latest modulation when multiple exist', () => {
-    const song = {
-      ...BASE_SONG,
+    const comp = {
+      ...BASE_COMPOSITION,
       globalKey: C_MAJOR,
       modulations: [
         { beat: 4,  key: G_MAJOR },
         { beat: 16, key: C_MINOR },
       ],
     };
-    expect(keyAtBeat(song, 3)).toEqual(C_MAJOR);
-    expect(keyAtBeat(song, 4)).toEqual(G_MAJOR);
-    expect(keyAtBeat(song, 15)).toEqual(G_MAJOR);
-    expect(keyAtBeat(song, 16)).toEqual(C_MINOR);
+    expect(keyAtBeat(comp, 3)).toEqual(C_MAJOR);
+    expect(keyAtBeat(comp, 4)).toEqual(G_MAJOR);
+    expect(keyAtBeat(comp, 15)).toEqual(G_MAJOR);
+    expect(keyAtBeat(comp, 16)).toEqual(C_MINOR);
   });
 });
 
@@ -327,11 +328,11 @@ describe('getDiatonicChordIntervals', () => {
 
 describe('analyzeHarmony — out-of-scale', () => {
   it('emits info for a chromatic note', () => {
-    const song = {
-      ...BASE_SONG,
+    const comp = {
+      ...BASE_COMPOSITION,
       notes: [note('cs', 61, 0)], // C# — not in C major
     };
-    const diags = analyzeHarmony(song);
+    const diags = analyzeHarmony(comp);
     expect(diags).toHaveLength(1);
     expect(diags[0].severity).toBe('info');
     expect(diags[0].type).toBe('out-of-scale');
@@ -339,116 +340,99 @@ describe('analyzeHarmony — out-of-scale', () => {
   });
 
   it('emits no diagnostics for all-diatonic notes', () => {
-    const song = {
-      ...BASE_SONG,
+    const comp = {
+      ...BASE_COMPOSITION,
       notes: [note('c', 60, 0), note('e', 64, 0), note('g', 67, 0)],
     };
-    expect(analyzeHarmony(song)).toHaveLength(0);
+    expect(analyzeHarmony(comp)).toHaveLength(0);
   });
 });
 
 describe('analyzeHarmony — parallel fifths', () => {
-  const STREAM_A = 'sa';
-  const STREAM_B = 'sb';
-  const streams = [
-    { id: STREAM_A, name: 'A', color: '#fff' },
-    { id: STREAM_B, name: 'B', color: '#000' },
-  ];
+  const PART_A = 'pa';
+  const PART_B = 'pb';
 
   it('detects parallel fifths between two voices', () => {
     // Voice A: C4→G4 (+7), Voice B: G4→D5 (+7) — both move up a fifth in parallel
-    const song: Song = {
-      ...BASE_SONG,
-      streams,
+    const comp: Composition = {
+      ...BASE_COMPOSITION,
       notes: [
-        note('a1', 60, 0, STREAM_A),  // C4
-        note('b1', 67, 0, STREAM_B),  // G4   interval = 7 (fifth)
-        note('a2', 67, 1, STREAM_A),  // G4
-        note('b2', 74, 1, STREAM_B),  // D5   interval = 7 (fifth) — parallel
+        note('a1', 60, 0, PART_A),  // C4
+        note('b1', 67, 0, PART_B),  // G4   interval = 7 (fifth)
+        note('a2', 67, 1, PART_A),  // G4
+        note('b2', 74, 1, PART_B),  // D5   interval = 7 (fifth) — parallel
       ],
     };
-    const diags = analyzeHarmony(song);
+    const diags = analyzeHarmony(comp);
     const p5 = diags.filter(d => d.type === 'parallel-fifth');
     expect(p5).toHaveLength(1);
     expect(p5[0].severity).toBe('error');
   });
 
   it('no parallel fifths when motion is contrary', () => {
-    const song: Song = {
-      ...BASE_SONG,
-      streams,
+    const comp: Composition = {
+      ...BASE_COMPOSITION,
       notes: [
-        note('a1', 60, 0, STREAM_A),  // C4
-        note('b1', 67, 0, STREAM_B),  // G4
-        note('a2', 67, 1, STREAM_A),  // G4  (up)
-        note('b2', 60, 1, STREAM_B),  // C4  (down) — contrary motion
+        note('a1', 60, 0, PART_A),  // C4
+        note('b1', 67, 0, PART_B),  // G4
+        note('a2', 67, 1, PART_A),  // G4  (up)
+        note('b2', 60, 1, PART_B),  // C4  (down) — contrary motion
       ],
     };
-    const diags = analyzeHarmony(song).filter(d => d.type === 'parallel-fifth');
+    const diags = analyzeHarmony(comp).filter(d => d.type === 'parallel-fifth');
     expect(diags).toHaveLength(0);
   });
 
   it('no false positive when one voice is static', () => {
-    const song: Song = {
-      ...BASE_SONG,
-      streams,
+    const comp: Composition = {
+      ...BASE_COMPOSITION,
       notes: [
-        note('a1', 60, 0, STREAM_A),
-        note('b1', 67, 0, STREAM_B),
-        note('a2', 67, 1, STREAM_A),  // moves
-        note('b2', 67, 1, STREAM_B),  // static
+        note('a1', 60, 0, PART_A),
+        note('b1', 67, 0, PART_B),
+        note('a2', 67, 1, PART_A),  // moves
+        note('b2', 67, 1, PART_B),  // static
       ],
     };
-    const diags = analyzeHarmony(song).filter(d => d.type === 'parallel-fifth');
+    const diags = analyzeHarmony(comp).filter(d => d.type === 'parallel-fifth');
     expect(diags).toHaveLength(0);
   });
 });
 
 describe('analyzeHarmony — parallel octaves', () => {
-  const SA = 'sa', SB = 'sb';
-  const streams = [
-    { id: SA, name: 'A', color: '#fff' },
-    { id: SB, name: 'B', color: '#000' },
-  ];
+  const PA = 'pa', PB = 'pb';
 
   it('detects parallel octaves', () => {
-    const song: Song = {
-      ...BASE_SONG,
-      streams,
+    const comp: Composition = {
+      ...BASE_COMPOSITION,
       notes: [
-        note('a1', 60, 0, SA),   // C4
-        note('b1', 72, 0, SB),   // C5  interval = 12 (octave)
-        note('a2', 67, 1, SA),   // G4
-        note('b2', 79, 1, SB),   // G5  interval = 12 — parallel
+        note('a1', 60, 0, PA),   // C4
+        note('b1', 72, 0, PB),   // C5  interval = 12 (octave)
+        note('a2', 67, 1, PA),   // G4
+        note('b2', 79, 1, PB),   // G5  interval = 12 — parallel
       ],
     };
-    const p8 = analyzeHarmony(song).filter(d => d.type === 'parallel-octave');
+    const p8 = analyzeHarmony(comp).filter(d => d.type === 'parallel-octave');
     expect(p8).toHaveLength(1);
     expect(p8[0].severity).toBe('error');
   });
 });
 
 describe('analyzeHarmony — voice crossing', () => {
-  const SA = 'sa', SB = 'sb';
-  const streams = [
-    { id: SA, name: 'A', color: '#fff' },
-    { id: SB, name: 'B', color: '#000' },
-  ];
+  const PA = 'pa', PB = 'pb';
 
   it('detects voice crossing when lower voice rises above upper', () => {
     // Voice A avg < Voice B avg → A is "lower", B is "upper"
     // At beat 4: A (high) > B (low) → crossing
-    const song: Song = {
-      ...BASE_SONG,
-      streams,
+    const comp: Composition = {
+      ...BASE_COMPOSITION,
       notes: [
-        note('a1', 60, 0, SA),   // C4 (low) — sets avg for A
-        note('b1', 72, 0, SB),   // C5 (high) — sets avg for B
-        note('a2', 74, 4, SA),   // D5 — A crosses above B
-        note('b2', 65, 4, SB),   // F4
+        note('a1', 60, 0, PA),   // C4 (low) — sets avg for A
+        note('b1', 72, 0, PB),   // C5 (high) — sets avg for B
+        note('a2', 74, 4, PA),   // D5 — A crosses above B
+        note('b2', 65, 4, PB),   // F4
       ],
     };
-    const vc = analyzeHarmony(song).filter(d => d.type === 'voice-crossing');
+    const vc = analyzeHarmony(comp).filter(d => d.type === 'voice-crossing');
     expect(vc).toHaveLength(1);
     expect(vc[0].severity).toBe('warning');
   });

@@ -1,105 +1,105 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import type { Song, KeySignature } from '../types/song';
-import { DEFAULT_SONG } from '../types/song';
+import type { Composition, KeySignature } from '../types/song';
+import { DEFAULT_COMPOSITION } from '../types/song';
 import { keyAtBeat, applyKeyTransform } from '../lib/harmony';
 import { annotateNote } from '../lib/music/note-operations';
 import { downloadSwell } from '../lib/swell-format/serialize';
 import {
-  nextStreamColor,
-  addStreamToSong,
-  removeStreamFromSong,
-  renameStream,
+  nextTrackColor,
+  addTrackToComposition,
+  removeTrackFromComposition,
+  renameTrack,
   applySATB,
-} from '../lib/music/stream';
+} from '../lib/music/part';
 
 export interface UseCompositionReturn {
-  song: Song;
-  setSong: React.Dispatch<React.SetStateAction<Song>>;
+  composition: Composition;
+  setComposition: React.Dispatch<React.SetStateAction<Composition>>;
   globalKey: KeySignature;
   setGlobalKey: (key: KeySignature) => void;
-  activeStreamId: string | null;
-  setActiveStreamId: React.Dispatch<React.SetStateAction<string | null>>;
+  activePartId: string | null;
+  setActivePartId: React.Dispatch<React.SetStateAction<string | null>>;
   spreadChord: boolean;
   setSpreadChord: React.Dispatch<React.SetStateAction<boolean>>;
-  handleAddStream: () => void;
-  handleRemoveStream: (streamId: string) => void;
-  handleRenameStream: (streamId: string, name: string) => void;
+  handleAddTrack: () => void;
+  handleRemoveTrack: (trackId: string) => void;
+  handleRenameTrack: (trackId: string, name: string) => void;
   handleApplySATB: () => void;
   handleExport: () => void;
-  handleImport: (imported: Song) => void;
+  handleImport: (imported: Composition) => void;
   handleBpmChange: (bpm: number) => void;
 }
 
 export const useComposition = (): UseCompositionReturn => {
-  const [song, setSong] = useState<Song>(DEFAULT_SONG);
-  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
+  const [composition, setComposition] = useState<Composition>(DEFAULT_COMPOSITION);
+  const [activePartId, setActivePartId] = useState<string | null>(null);
   const [spreadChord, setSpreadChord] = useState(false);
 
-  const globalKey = song.globalKey;
+  const globalKey = composition.globalKey;
 
   const setGlobalKey = useCallback((newKey: KeySignature) => {
-    setSong(s => {
-      const songWithNewKey = { ...s, globalKey: newKey };
+    setComposition(s => {
+      const withNewKey = { ...s, globalKey: newKey };
 
       // Remap diatonic notes so each keeps its scale degree in the new key,
       // then re-annotate spelledPitch with the new key context.
       return {
-        ...songWithNewKey,
+        ...withNewKey,
         notes: applyKeyTransform(s.notes, s.globalKey, newKey).map(n => ({
           ...n,
-          ...annotateNote(n.pitch, keyAtBeat(songWithNewKey, n.startBeat)),
+          ...annotateNote(n.pitch, keyAtBeat(withNewKey, n.startBeat)),
         })),
       };
     });
   }, []);
 
-  const handleAddStream = useCallback(() => {
-    setSong(s => {
-      const color = nextStreamColor(s.streams);
-      const name = `Stream ${s.streams.length + 1}`;
-      const updated = addStreamToSong(s, name, color);
-      setActiveStreamId(updated.streams[updated.streams.length - 1].id);
+  const handleAddTrack = useCallback(() => {
+    setComposition(s => {
+      const color = nextTrackColor(s.tracks);
+      const name = `Track ${s.tracks.length + 1}`;
+      const updated = addTrackToComposition(s, name, color);
+      setActivePartId(updated.tracks[updated.tracks.length - 1].id);
       return updated;
     });
   }, []);
 
-  const handleRemoveStream = useCallback((streamId: string) => {
-    setSong(s => removeStreamFromSong(s, streamId));
-    setActiveStreamId(id => id === streamId ? null : id);
+  const handleRemoveTrack = useCallback((trackId: string) => {
+    setComposition(s => removeTrackFromComposition(s, trackId));
+    setActivePartId(id => id === trackId ? null : id);
   }, []);
 
-  const handleRenameStream = useCallback((streamId: string, name: string) => {
-    setSong(s => renameStream(s, streamId, name));
+  const handleRenameTrack = useCallback((trackId: string, name: string) => {
+    setComposition(s => renameTrack(s, trackId, name));
   }, []);
 
   const handleApplySATB = useCallback(() => {
-    setSong(s => {
+    setComposition(s => {
       const updated = applySATB(s);
-      setActiveStreamId(updated.streams[0]?.id ?? null);
+      setActivePartId(updated.parts[0]?.id ?? null);
       return updated;
     });
   }, []);
 
-  const handleExport = useCallback(() => downloadSwell(song), [song]);
-  const handleImport = useCallback((imported: Song) => setSong(imported), []);
+  const handleExport = useCallback(() => downloadSwell(composition), [composition]);
+  const handleImport = useCallback((imported: Composition) => setComposition(imported), []);
   const handleBpmChange = useCallback((bpm: number) => {
-    setSong(s => ({ ...s, bpm }));
+    setComposition(s => ({ ...s, bpm }));
   }, []);
 
   return {
-    song,
-    setSong,
+    composition,
+    setComposition,
     globalKey,
     setGlobalKey,
-    activeStreamId,
-    setActiveStreamId,
+    activePartId,
+    setActivePartId,
     spreadChord,
     setSpreadChord,
-    handleAddStream,
-    handleRemoveStream,
-    handleRenameStream,
+    handleAddTrack,
+    handleRemoveTrack,
+    handleRenameTrack,
     handleApplySATB,
     handleExport,
     handleImport,

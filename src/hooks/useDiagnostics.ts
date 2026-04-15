@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { Song } from '../types/song';
+import type { Composition } from '../types/song';
 import { analyzeHarmony, computeNoteFunctions } from '../lib/harmony';
 import type { Diagnostic, NoteFunctionMap } from '../lib/harmony';
 
@@ -10,8 +10,8 @@ export interface DiagnosticsResult {
   readonly noteFunctions: NoteFunctionMap;
 }
 
-export const useDiagnostics = (song: Song): DiagnosticsResult =>
+export const useDiagnostics = (composition: Composition): DiagnosticsResult =>
   useMemo(() => ({
-    diagnostics: analyzeHarmony(song),
-    noteFunctions: computeNoteFunctions(song),
-  }), [song]);
+    diagnostics: analyzeHarmony(composition),
+    noteFunctions: computeNoteFunctions(composition),
+  }), [composition]);

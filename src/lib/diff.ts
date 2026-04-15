@@ -1,4 +1,4 @@
-import type { Note, Song } from '../types/song';
+import type { Note, Composition } from '../types/song';
 
 export type NoteDiff = {
   added: readonly Note[];
@@ -6,7 +6,7 @@ export type NoteDiff = {
   unchanged: readonly Note[];
 };
 
-export const diffSongs = (current: Song, suggested: Song): NoteDiff => {
+export const diffCompositions = (current: Composition, suggested: Composition): NoteDiff => {
   const currentIds = new Set(current.notes.map(n => n.id));
   const suggestedIds = new Set(suggested.notes.map(n => n.id));
   return {

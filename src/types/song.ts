@@ -1,10 +1,20 @@
 // Internal file format for Swell compositions
 // Serializes to/from JSON (.swell files)
 
-export interface Stream {
+import { genId } from '../lib/id';
+
+export interface Track {
   readonly id: string;
   readonly name: string;
   readonly color: string; // hex color, e.g. '#60a5fa'
+}
+
+export type VoiceRole = 'soprano' | 'alto' | 'tenor' | 'bass' | (string & {});
+
+export interface Part {
+  readonly id: string;
+  readonly trackId: string;
+  readonly voice?: VoiceRole;
 }
 
 // ── Pitched spelling ──────────────────────────────────────────────────────────
@@ -36,7 +46,7 @@ export interface KeySignature {
   readonly mode: ScaleMode;
 }
 
-/** A key change at a specific beat (for mid-song modulations). */
+/** A key change at a specific beat (for mid-composition modulations). */
 export interface Modulation {
   readonly beat: number;
   readonly key: KeySignature;
@@ -58,30 +68,34 @@ export interface Note {
   readonly startBeat: number;
   readonly durationBeats: number;
   readonly velocity: number;    // 0–127
-  readonly streamId?: string;   // optional stream membership
+  readonly partId?: string;     // optional part membership
 }
 
-// ── Song ──────────────────────────────────────────────────────────────────────
+// ── Composition ──────────────────────────────────────────────────────────────
 
-export interface Song {
-  readonly version: '1.0';
+export interface Composition {
+  readonly id: string;
+  readonly version: '2.0';
   readonly bpm: number;
   readonly beatsPerMeasure: number;
   readonly totalBeats: number;
   readonly notes: readonly Note[];
-  readonly streams: readonly Stream[];
+  readonly tracks: readonly Track[];
+  readonly parts: readonly Part[];
   /** Global key signature (applies from beat 0 unless overridden by modulations). */
   readonly globalKey: KeySignature;
   /** Ordered list of key changes. Each entry overrides globalKey from its beat onward. */
   readonly modulations?: readonly Modulation[];
 }
 
-export const DEFAULT_SONG: Song = {
-  version: '1.0',
+export const DEFAULT_COMPOSITION: Composition = {
+  id: genId(),
+  version: '2.0',
   bpm: 120,
   beatsPerMeasure: 4,
   totalBeats: 32,
   notes: [],
-  streams: [],
+  tracks: [],
+  parts: [],
   globalKey: { root: 'C', mode: 'major' },
-} as const;
+};

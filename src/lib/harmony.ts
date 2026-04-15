@@ -3,12 +3,12 @@
  *
  * Design:
  *   - spellMidi(midi, key)  — maps a MIDI integer to an enharmonically unambiguous SpelledPitch
- *   - keyAtBeat(song, beat) — resolves the active KeySignature (global + modulations)
- *   - analyzeHarmony(song)  — returns Diagnostic[] (errors / warnings / infos)
+ *   - keyAtBeat(composition, beat) — resolves the active KeySignature (global + modulations)
+ *   - analyzeHarmony(composition)  — returns Diagnostic[] (errors / warnings / infos)
  */
 
 import type {
-  Song,
+  Composition,
   Note,
   KeySignature,
   SpelledPitch,
@@ -70,7 +70,7 @@ const MINOR_DEGREE_SPELLINGS: readonly (readonly [NoteLetter, Accidental][])[] =
 // ── Key utilities ─────────────────────────────────────────────────────────────
 
 /** Returns the active key at a given beat (respects modulations). */
-export const keyAtBeat = (song: Song, beat: number): KeySignature => {
+export const keyAtBeat = (song: Composition, beat: number): KeySignature => {
   if (!song.modulations?.length) return song.globalKey;
   // The last modulation whose beat is ≤ the query beat wins; fall back to globalKey.
   const active = song.modulations
@@ -336,7 +336,7 @@ export type NoteFunctionMap = ReadonlyMap<string, NoteFunction>;
  * Passing tone / neighbor tone / suspension detection is planned but not yet
  * implemented (requires voice-leading analysis across consecutive chords).
  */
-export const computeNoteFunctions = (song: Song): NoteFunctionMap => {
+export const computeNoteFunctions = (song: Composition): NoteFunctionMap => {
   const result = new Map<string, NoteFunction>();
 
   for (const note of song.notes) {
@@ -393,11 +393,11 @@ const pitchLabel = (midi: number, key: KeySignature): string => {
  *
  * Detects:
  *   - Out-of-scale notes (info) when globalKey is set
- *   - Parallel 5ths (error) between streamed voices
- *   - Parallel octaves (error) between streamed voices
+ *   - Parallel 5ths (error) between voiced parts
+ *   - Parallel octaves (error) between voiced parts
  *   - Voice crossing (warning) when voices swap registers
  */
-export const analyzeHarmony = (song: Song): readonly Diagnostic[] => {
+export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
   const diags: Diagnostic[] = [];
 
   // ── 1. Out-of-scale notes ──────────────────────────────────────────────────
@@ -414,19 +414,19 @@ export const analyzeHarmony = (song: Song): readonly Diagnostic[] => {
     }
   }
 
-  // ── Stream-based analysis (needs at least 2 streamed voices) ──────────────
-  const streamedNotes = song.notes.filter(n => n.streamId);
-  const streamIds = [...new Set(streamedNotes.map(n => n.streamId!))];
-  if (streamIds.length < 2) return diags;
+  // ── Part-based analysis (needs at least 2 voiced parts) ──────────────
+  const partedNotes = song.notes.filter(n => n.partId);
+  const partIds = [...new Set(partedNotes.map(n => n.partId!))];
+  if (partIds.length < 2) return diags;
 
   // Unique beats, sorted
-  const beats = [...new Set(streamedNotes.map(n => n.startBeat))].sort((a, b) => a - b);
+  const beats = [...new Set(partedNotes.map(n => n.startBeat))].sort((a, b) => a - b);
 
-  // Map beat → (streamId → Note)
+  // Map beat → (partId → Note)
   const snapshots = beats.map(beat => {
     const map = new Map<string, Note>();
-    for (const n of streamedNotes) {
-      if (n.startBeat === beat && n.streamId) map.set(n.streamId, n);
+    for (const n of partedNotes) {
+      if (n.startBeat === beat && n.partId) map.set(n.partId, n);
     }
     return { beat, map };
   });
@@ -436,13 +436,13 @@ export const analyzeHarmony = (song: Song): readonly Diagnostic[] => {
     const prev = snapshots[i - 1];
     const curr = snapshots[i];
 
-    // Only check stream pairs present in both snapshots
-    const commonStreams = streamIds.filter(id => prev.map.has(id) && curr.map.has(id));
+    // Only check part pairs present in both snapshots
+    const commonParts = partIds.filter(id => prev.map.has(id) && curr.map.has(id));
 
-    for (let a = 0; a < commonStreams.length; a++) {
-      for (let b = a + 1; b < commonStreams.length; b++) {
-        const idA = commonStreams[a];
-        const idB = commonStreams[b];
+    for (let a = 0; a < commonParts.length; a++) {
+      for (let b = a + 1; b < commonParts.length; b++) {
+        const idA = commonParts[a];
+        const idB = commonParts[b];
 
         const pA = prev.map.get(idA)!.pitch;
         const pB = prev.map.get(idB)!.pitch;
@@ -489,21 +489,21 @@ export const analyzeHarmony = (song: Song): readonly Diagnostic[] => {
   }
 
   // ── 3. Voice crossing ─────────────────────────────────────────────────────
-  // Infer expected ordering from average pitch per stream (lower stream = lower pitch)
+  // Infer expected ordering from average pitch per part (lower part = lower pitch)
   const avgPitch = new Map(
-    streamIds.map(id => {
-      const notes = streamedNotes.filter(n => n.streamId === id);
+    partIds.map(id => {
+      const notes = partedNotes.filter(n => n.partId === id);
       return [id, notes.reduce((s, n) => s + n.pitch, 0) / notes.length];
     }),
   );
-  const orderedStreams = [...streamIds].sort(
+  const orderedParts = [...partIds].sort(
     (a, b) => (avgPitch.get(a) ?? 0) - (avgPitch.get(b) ?? 0),
   );
 
   for (const { beat, map } of snapshots) {
-    for (let i = 0; i < orderedStreams.length - 1; i++) {
-      const lower = orderedStreams[i];
-      const upper = orderedStreams[i + 1];
+    for (let i = 0; i < orderedParts.length - 1; i++) {
+      const lower = orderedParts[i];
+      const upper = orderedParts[i + 1];
       const nLower = map.get(lower);
       const nUpper = map.get(upper);
       if (!nLower || !nUpper) continue;

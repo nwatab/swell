@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { RefObject } from 'react';
-import type { Song } from '../types/song';
+import type { Composition } from '../types/song';
 import type { SuggestionState, DragState } from '../types/ui-state';
 import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
@@ -12,7 +12,7 @@ import {
   addChord,
   removeNote,
   moveNote,
-  spreadChordAcrossStreams,
+  spreadChordAcrossParts,
 } from '../lib/music/note-operations';
 import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic } from '../lib/harmony';
 import { yToPitch } from '../components/piano-roll/layout';
@@ -23,28 +23,28 @@ export interface UseNoteInteractionReturn {
 }
 
 export interface UseNoteInteractionOptions {
-  song: Song;
+  composition: Composition;
   suggestionStatus: SuggestionState['status'];
   snapDiv: SnapDiv;
   triplet: boolean;
   cellW: number;
   chordType: ChordType;
-  activeStreamId: string | null;
+  activePartId: string | null;
   spreadChord: boolean;
-  setSong: React.Dispatch<React.SetStateAction<Song>>;
+  setComposition: React.Dispatch<React.SetStateAction<Composition>>;
   gridRef: RefObject<HTMLDivElement | null>;
 }
 
 export const useNoteInteraction = ({
-  song,
+  composition,
   suggestionStatus,
   snapDiv,
   triplet,
   cellW,
   chordType,
-  activeStreamId,
+  activePartId,
   spreadChord,
-  setSong,
+  setComposition,
   gridRef,
 }: UseNoteInteractionOptions): UseNoteInteractionReturn => {
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -52,8 +52,8 @@ export const useNoteInteraction = ({
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
 
-  const songRef = useRef<Song>(song);
-  songRef.current = song;
+  const compositionRef = useRef<Composition>(composition);
+  compositionRef.current = composition;
 
   const cellWRef = useRef(cellW);
   cellWRef.current = cellW;
@@ -71,7 +71,7 @@ export const useNoteInteraction = ({
       const rawBeat = (e.clientX - rect.left) / cellWRef.current;
       const pitch = yToPitch(e.clientY - rect.top);
       if (pitch === null) return;
-      const s = songRef.current;
+      const s = compositionRef.current;
       const res = resolutionRef.current;
       const newBeat = Math.max(0, Math.min(s.totalBeats - 1, snapBeat(rawBeat - d.beatOffset, res)));
       const hasMoved = newBeat !== d.originalBeat || pitch !== d.originalPitch;
@@ -82,9 +82,9 @@ export const useNoteInteraction = ({
       const d = dragRef.current;
       if (!d) return;
       if (d.hasMoved) {
-        setSong(s => moveNote(s, d.noteId, d.previewBeat, d.previewPitch));
+        setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewPitch));
       } else {
-        setSong(s => removeNote(s, d.noteId));
+        setComposition(s => removeNote(s, d.noteId));
       }
       setDrag(null);
     };
@@ -105,10 +105,10 @@ export const useNoteInteraction = ({
       const rawBeat = (e.clientX - rect.left) / cellW;
       const pitch = yToPitch(e.clientY - rect.top);
       const resolution = toResolution(snapDiv, triplet);
-      if (pitch === null || rawBeat < 0 || rawBeat >= song.totalBeats) return;
+      if (pitch === null || rawBeat < 0 || rawBeat >= composition.totalBeats) return;
 
       // Hit-test uses raw position for accuracy
-      const hit = song.notes.find(
+      const hit = composition.notes.find(
         n => n.pitch === pitch && rawBeat >= n.startBeat && rawBeat < n.startBeat + n.durationBeats,
       );
 
@@ -123,14 +123,14 @@ export const useNoteInteraction = ({
           hasMoved: false,
         });
       } else {
-        const snapped = Math.max(0, Math.min(song.totalBeats - resolution, snapBeatFloor(rawBeat, resolution)));
+        const snapped = Math.max(0, Math.min(composition.totalBeats - resolution, snapBeatFloor(rawBeat, resolution)));
 
         // Resolve chord intervals: diatonic types depend on the active key.
         const isDia = chordType === 'dia' || chordType === 'dia7';
         let intervals: readonly number[];
         let rootPitch = pitch; // may be snapped for diatonic mode
         if (isDia) {
-          const key = keyAtBeat(song, snapped);
+          const key = keyAtBeat(composition, snapped);
           // Snap chromatic pitches to the nearest diatonic note so Dia mode
           // always produces a chord even when the user clicks a black key.
           rootPitch = snapToDiatonic(pitch, key);
@@ -139,14 +139,14 @@ export const useNoteInteraction = ({
           intervals = CHORD_INTERVALS[chordType];
         }
 
-        if (spreadChord && intervals.length > 1 && song.streams.length >= 2) {
-          setSong(s => spreadChordAcrossStreams(s, rootPitch, snapped, resolution, intervals));
+        if (spreadChord && intervals.length > 1 && composition.parts.length >= 2) {
+          setComposition(s => spreadChordAcrossParts(s, rootPitch, snapped, resolution, intervals));
         } else {
-          setSong(s => addChord(s, rootPitch, snapped, resolution, intervals, activeStreamId ?? undefined));
+          setComposition(s => addChord(s, rootPitch, snapped, resolution, intervals, activePartId ?? undefined));
         }
       }
     },
-    [song, suggestionStatus, snapDiv, triplet, cellW, chordType, activeStreamId, spreadChord, setSong],
+    [composition, suggestionStatus, snapDiv, triplet, cellW, chordType, activePartId, spreadChord, setComposition],
   );
 
   return { drag, handleGridMouseDown };

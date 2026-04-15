@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import type { Song } from '../types/song';
-import { playSong } from '../lib/audio';
+import type { Composition } from '../types/song';
+import { playComposition } from '../lib/audio';
 
 export interface UsePlaybackReturn {
   playing: boolean;
@@ -10,7 +10,7 @@ export interface UsePlaybackReturn {
   togglePlay: () => void;
 }
 
-export const usePlayback = (activeSong: Song): UsePlaybackReturn => {
+export const usePlayback = (activeComposition: Composition): UsePlaybackReturn => {
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
 
@@ -18,8 +18,8 @@ export const usePlayback = (activeSong: Song): UsePlaybackReturn => {
   const stopOscillatorsRef = useRef<(() => void) | null>(null);
   const rafRef = useRef<number>(0);
   const playStartWallRef = useRef<number>(0);
-  const activeSongRef = useRef<Song>(activeSong);
-  activeSongRef.current = activeSong;
+  const activeCompositionRef = useRef<Composition>(activeComposition);
+  activeCompositionRef.current = activeComposition;
 
   const getCtx = (): AudioContext => {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
@@ -36,17 +36,17 @@ export const usePlayback = (activeSong: Song): UsePlaybackReturn => {
   }, []);
 
   const startPlayback = useCallback(() => {
-    const song = activeSongRef.current;
+    const comp = activeCompositionRef.current;
     const ctx = getCtx();
-    const bps = song.bpm / 60;
-    stopOscillatorsRef.current = playSong(ctx, song);
+    const bps = comp.bpm / 60;
+    stopOscillatorsRef.current = playComposition(ctx, comp);
     playStartWallRef.current = performance.now();
     setPlaying(true);
 
     const tick = () => {
       const elapsed = (performance.now() - playStartWallRef.current) / 1000;
       const beat = elapsed * bps;
-      if (beat >= activeSongRef.current.totalBeats) { stopPlayback(); return; }
+      if (beat >= activeCompositionRef.current.totalBeats) { stopPlayback(); return; }
       setPlayhead(beat);
       rafRef.current = requestAnimationFrame(tick);
     };

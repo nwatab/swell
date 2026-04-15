@@ -15,7 +15,7 @@ ADR-001 で `isDiatonic` という語の多義性が問題になった。
 
 1. **依存方向の逆転**: `Note` は Generative layer のデータ。和声機能の判定には他の `Note` との関係が必要であり、単一 `Note` の属性ではない。
 2. **更新コスト**: 一音を追加・移動するたびに周辺音すべての機能を再計算して `Note` を書き換えるのはコストが高く、かつバグを招く。
-3. **分離原則**: データ（`Song`）と解析結果（`Analytical layer`）は分離すべき。`Song` は常に「純粋なデータ」として扱いたい。
+3. **分離原則**: データ（`Composition`）と解析結果（`Analytical layer`）は分離すべき。`Composition` は常に「純粋なデータ」として扱いたい。
 
 ## Decision
 
@@ -34,16 +34,16 @@ export type NoteFunction =
 export type NoteFunctionMap = ReadonlyMap<string, NoteFunction>;
 ```
 
-`computeNoteFunctions(song: Song): NoteFunctionMap` が解析エントリポイント。
+`computeNoteFunctions(composition: Composition): NoteFunctionMap` が解析エントリポイント。
 `useDiagnostics` hook が `analyzeHarmony` と合わせて `noteFunctions` を返す。
 
 ## Consequences
 
 **得られるもの:**
 
-- `Song` / `Note` の構造がシンプルに保たれる（Analytical layer の出力で汚染されない）
-- `NoteFunction` の計算はメモ化（`useMemo`）できる。`Song` が変わらない限り再計算不要
-- 将来の精緻化（機械学習ベースの機能検出など）が `Song` 型に影響しない
+- `Composition` / `Note` の構造がシンプルに保たれる（Analytical layer の出力で汚染されない）
+- `NoteFunction` の計算はメモ化（`useMemo`）できる。`Composition` が変わらない限り再計算不要
+- 将来の精緻化（機械学習ベースの機能検出など）が `Composition` 型に影響しない
 - `NoteFunction` を表示レイヤ（ピアノロールの色分けなど）から切り離せる
 
 **コスト:**

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import type { Song } from '../types/song';
+import type { Composition } from '../types/song';
 import type { SuggestionState } from '../types/ui-state';
-import { diffSongs } from '../lib/diff';
+import { diffCompositions } from '../lib/diff';
 
 export interface UseAgentSuggestionReturn {
   suggestion: SuggestionState;
@@ -13,8 +13,8 @@ export interface UseAgentSuggestionReturn {
 }
 
 export const useAgentSuggestion = (
-  song: Song,
-  setSong: React.Dispatch<React.SetStateAction<Song>>,
+  composition: Composition,
+  setComposition: React.Dispatch<React.SetStateAction<Composition>>,
 ): UseAgentSuggestionReturn => {
   const [suggestion, setSuggestion] = useState<SuggestionState>({ status: 'idle' });
 
@@ -24,28 +24,28 @@ export const useAgentSuggestion = (
       const res = await fetch('/api/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ song, instruction }),
+        body: JSON.stringify({ composition, instruction }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'API error');
-      const suggestedSong: Song = data.suggestedSong;
+      const suggestedComposition: Composition = data.suggestedComposition;
       setSuggestion({
         status: 'ready',
-        suggestedSong,
-        diff: diffSongs(song, suggestedSong),
+        suggestedComposition,
+        diff: diffCompositions(composition, suggestedComposition),
       });
     } catch (err) {
       console.error(err);
       setSuggestion({ status: 'idle' });
       alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [song]);
+  }, [composition]);
 
   const handleAccept = useCallback(() => {
     if (suggestion.status !== 'ready') return;
-    setSong(suggestion.suggestedSong);
+    setComposition(suggestion.suggestedComposition);
     setSuggestion({ status: 'idle' });
-  }, [suggestion, setSong]);
+  }, [suggestion, setComposition]);
 
   const handleReject = useCallback(() => {
     setSuggestion({ status: 'idle' });

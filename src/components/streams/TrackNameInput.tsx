@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 
-interface StreamNameInputProps {
+interface TrackNameInputProps {
   name: string;
   color: string;
   onRename: (name: string) => void;
 }
 
-export default function StreamNameInput({ name, color, onRename }: StreamNameInputProps) {
+export default function TrackNameInput({ name, color, onRename }: TrackNameInputProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
 

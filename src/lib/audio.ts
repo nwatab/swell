@@ -1,4 +1,4 @@
-import type { Note, Song } from '../types/song';
+import type { Note, Composition } from '../types/song';
 
 const midiToFreq = (midi: number): number =>
   440 * Math.pow(2, (midi - 69) / 12);
@@ -6,7 +6,7 @@ const midiToFreq = (midi: number): number =>
 const scheduleNote = (
   ctx: AudioContext,
   note: Note,
-  songStartTime: number,
+  startTime: number,
   bps: number
 ): OscillatorNode => {
   const osc = ctx.createOscillator();
@@ -19,7 +19,7 @@ const scheduleNote = (
   osc.type = 'triangle';
   osc.frequency.value = midiToFreq(note.pitch);
 
-  const t0 = songStartTime + note.startBeat / bps;
+  const t0 = startTime + note.startBeat / bps;
   const dur = note.durationBeats / bps;
   const amp = (note.velocity / 127) * 0.35;
 
@@ -36,14 +36,14 @@ const scheduleNote = (
   return osc;
 };
 
-export const playSong = (
+export const playComposition = (
   ctx: AudioContext,
-  song: Song
+  composition: Composition
 ): (() => void) => {
-  const bps = song.bpm / 60;
+  const bps = composition.bpm / 60;
   const startedAt = ctx.currentTime + 0.05;
 
-  const oscs = song.notes.map(note => scheduleNote(ctx, note, startedAt, bps));
+  const oscs = composition.notes.map(note => scheduleNote(ctx, note, startedAt, bps));
 
   return () => oscs.forEach(osc => { try { osc.stop(); } catch { /* already stopped */ } });
 };

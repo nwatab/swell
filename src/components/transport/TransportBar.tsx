@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import type { Song, KeySignature } from '../../types/song';
+import type { Composition, KeySignature } from '../../types/song';
 import type { SnapDiv } from '../../lib/snap';
 import type { ChordType } from '../../lib/music/chord';
 import { parseSwell } from '../../lib/swell-format/deserialize';
@@ -19,7 +19,7 @@ interface TransportBarProps {
   onMusicGenToggle: () => void;
   musicGenActive: boolean;
   onExport: () => void;
-  onImport: (song: Song) => void;
+  onImport: (composition: Composition) => void;
   snapDiv: SnapDiv;
   triplet: boolean;
   onSnapDivChange: (div: SnapDiv) => void;

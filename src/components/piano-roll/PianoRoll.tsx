@@ -13,7 +13,7 @@ import type { SnapDiv } from '../../lib/snap';
 import type { ChordType } from '../../lib/music/chord';
 import { NUM_WHITE_KEYS, WHITE_H } from './layout';
 import TransportBar from '../transport/TransportBar';
-import StreamsBar from '../streams/StreamsBar';
+import TracksBar from '../streams/TracksBar';
 import MusicGenBar from '../agent/MusicGenBar';
 import AgentBar from '../agent/AgentBar';
 import ProblemsPanel from '../diagnostics/ProblemsPanel';
@@ -24,40 +24,40 @@ import NoteLayer from './NoteLayer';
 import Playhead from './Playhead';
 
 export default function PianoRoll() {
-  const composition = useComposition();
-  const { song, setSong, globalKey, setGlobalKey, activeStreamId, setActiveStreamId, spreadChord, setSpreadChord,
-    handleAddStream, handleRemoveStream, handleRenameStream, handleApplySATB,
-    handleExport, handleImport, handleBpmChange } = composition;
+  const comp = useComposition();
+  const { composition, setComposition, globalKey, setGlobalKey, activePartId, setActivePartId, spreadChord, setSpreadChord,
+    handleAddTrack, handleRemoveTrack, handleRenameTrack, handleApplySATB,
+    handleExport, handleImport, handleBpmChange } = comp;
 
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
   const [triplet, setTriplet] = useState(false);
   const [chordType, setChordType] = useState<ChordType>('note');
   const [problemsOpen, setProblemsOpen] = useState(false);
 
-  const { suggestion, handleAgentSubmit, handleAccept, handleReject } = useAgentSuggestion(song, setSong);
+  const { suggestion, handleAgentSubmit, handleAccept, handleReject } = useAgentSuggestion(composition, setComposition);
   const { musicGen, handleMusicGenToggle, handleMusicGen, closeMusicGen } = useMusicGen();
   const { cellW, zoomIn, zoomOut, canZoomIn, canZoomOut } = useZoom();
-  const { diagnostics } = useDiagnostics(song);
+  const { diagnostics } = useDiagnostics(composition);
 
-  const activeSong = suggestion.status === 'ready' ? suggestion.suggestedSong : song;
-  const { playing, playhead, togglePlay } = usePlayback(activeSong);
+  const activeComposition = suggestion.status === 'ready' ? suggestion.suggestedComposition : composition;
+  const { playing, playhead, togglePlay } = usePlayback(activeComposition);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const { drag, handleGridMouseDown } = useNoteInteraction({
-    song,
+    composition,
     suggestionStatus: suggestion.status,
     snapDiv,
     triplet,
     cellW,
     chordType,
-    activeStreamId,
+    activePartId,
     spreadChord,
-    setSong,
+    setComposition,
     gridRef,
   });
 
   const resolution = toResolution(snapDiv, triplet);
-  const gridWidth = song.totalBeats * cellW;
+  const gridWidth = composition.totalBeats * cellW;
   const gridHeight = NUM_WHITE_KEYS * WHITE_H;
 
   return (
@@ -65,7 +65,7 @@ export default function PianoRoll() {
       <TransportBar
         playing={playing}
         beat={playhead}
-        bpm={song.bpm}
+        bpm={composition.bpm}
         onTogglePlay={togglePlay}
         onBpmChange={handleBpmChange}
         onMusicGenToggle={handleMusicGenToggle}
@@ -85,13 +85,13 @@ export default function PianoRoll() {
         globalKey={globalKey}
         onGlobalKeyChange={setGlobalKey}
       />
-      <StreamsBar
-        streams={song.streams}
-        activeStreamId={activeStreamId}
-        onActiveStreamChange={setActiveStreamId}
-        onAddStream={handleAddStream}
-        onRemoveStream={handleRemoveStream}
-        onRenameStream={handleRenameStream}
+      <TracksBar
+        tracks={composition.tracks}
+        activePartId={activePartId}
+        onActivePartChange={setActivePartId}
+        onAddTrack={handleAddTrack}
+        onRemoveTrack={handleRemoveTrack}
+        onRenameTrack={handleRenameTrack}
         onApplySATB={handleApplySATB}
         spreadChord={spreadChord}
         onSpreadChordToggle={() => setSpreadChord(v => !v)}
@@ -110,8 +110,8 @@ export default function PianoRoll() {
         {/* Scrollable grid */}
         <div className="flex-1 overflow-auto">
           <BeatHeader
-            totalBeats={song.totalBeats}
-            beatsPerMeasure={song.beatsPerMeasure}
+            totalBeats={composition.totalBeats}
+            beatsPerMeasure={composition.beatsPerMeasure}
             cellW={cellW}
           />
 
@@ -125,15 +125,15 @@ export default function PianoRoll() {
             onMouseDown={handleGridMouseDown}
           >
             <Grid
-              totalBeats={song.totalBeats}
-              beatsPerMeasure={song.beatsPerMeasure}
+              totalBeats={composition.totalBeats}
+              beatsPerMeasure={composition.beatsPerMeasure}
               cellW={cellW}
               resolution={resolution}
               globalKey={globalKey}
             />
             <NoteLayer
-              song={song}
-              activeSong={activeSong}
+              composition={composition}
+              activeComposition={activeComposition}
               suggestion={suggestion}
               drag={drag}
               cellW={cellW}

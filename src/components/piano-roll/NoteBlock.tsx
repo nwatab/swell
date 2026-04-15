@@ -10,16 +10,16 @@ interface NoteBlockProps {
   note: Note;
   cellW: number;
   variant?: NoteVariant;
-  streamColor?: string;
+  trackColor?: string;
 }
 
 export default function NoteBlock({
   note,
   cellW,
   variant = 'normal',
-  streamColor,
+  trackColor,
 }: NoteBlockProps) {
-  const color = streamColor ?? '#3b82f6';
+  const color = trackColor ?? '#3b82f6';
   const style: React.CSSProperties =
     variant === 'added'    ? { backgroundColor: '#10b981', borderColor: '#6ee7b7' } :
     variant === 'removed'  ? { backgroundColor: 'rgba(239,68,68,0.6)', borderColor: '#f87171', opacity: 0.7 } :

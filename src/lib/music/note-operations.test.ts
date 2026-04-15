@@ -4,22 +4,23 @@ import {
   removeNote,
   moveNote,
   findNextChordTone,
-  spreadChordAcrossStreams,
+  spreadChordAcrossParts,
 } from './note-operations';
-import type { Song, KeySignature } from '../../types/song';
+import type { Composition, KeySignature } from '../../types/song';
+import { genId } from '../id';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const C_MAJOR: KeySignature = { root: 'C', mode: 'major' };
-const BASE: Song = {
-  version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], streams: [],
-  globalKey: C_MAJOR,
+const BASE: Composition = {
+  id: genId(), version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], tracks: [],
+  parts: [], globalKey: C_MAJOR,
 };
 
 // ── addNote ───────────────────────────────────────────────────────────────────
 
 describe('addNote', () => {
-  it('adds a note to an empty song', () => {
+  it('adds a note to an empty composition', () => {
     const result = addNote(BASE, 60, 0);
     expect(result.notes).toHaveLength(1);
     expect(result.notes[0].pitch).toBe(60);
@@ -27,7 +28,7 @@ describe('addNote', () => {
     expect(result.notes[0].durationBeats).toBe(1);
   });
 
-  it('does not mutate the original song', () => {
+  it('does not mutate the original composition', () => {
     addNote(BASE, 60, 0);
     expect(BASE.notes).toHaveLength(0);
   });
@@ -37,9 +38,9 @@ describe('addNote', () => {
     expect(result.notes[0].spelledPitch).toEqual({ letter: 'C', accidental: 0, octave: 4 });
   });
 
-  it('assigns the given streamId', () => {
-    const result = addNote(BASE, 60, 0, 1, 'stream1');
-    expect(result.notes[0].streamId).toBe('stream1');
+  it('assigns the given partId', () => {
+    const result = addNote(BASE, 60, 0, 1, 'part1');
+    expect(result.notes[0].partId).toBe('part1');
   });
 
   it('uses provided durationBeats', () => {
@@ -58,9 +59,9 @@ describe('addNote', () => {
 
 describe('removeNote', () => {
   it('removes the note with the given id', () => {
-    const song = addNote(BASE, 60, 0);
-    const id = song.notes[0].id;
-    const result = removeNote(song, id);
+    const comp = addNote(BASE, 60, 0);
+    const id = comp.notes[0].id;
+    const result = removeNote(comp, id);
     expect(result.notes).toHaveLength(0);
   });
 
@@ -74,8 +75,8 @@ describe('removeNote', () => {
   });
 
   it('is a no-op for an unknown id', () => {
-    const song = addNote(BASE, 60, 0);
-    const result = removeNote(song, 'nonexistent');
+    const comp = addNote(BASE, 60, 0);
+    const result = removeNote(comp, 'nonexistent');
     expect(result.notes).toHaveLength(1);
   });
 });
@@ -84,17 +85,17 @@ describe('removeNote', () => {
 
 describe('moveNote', () => {
   it('updates startBeat and pitch', () => {
-    const song = addNote(BASE, 60, 0);
-    const id = song.notes[0].id;
-    const result = moveNote(song, id, 4, 67);
+    const comp = addNote(BASE, 60, 0);
+    const id = comp.notes[0].id;
+    const result = moveNote(comp, id, 4, 67);
     expect(result.notes[0].startBeat).toBe(4);
     expect(result.notes[0].pitch).toBe(67);
   });
 
   it('re-annotates spelledPitch on move', () => {
-    const song = addNote(BASE, 60, 0);
-    const id = song.notes[0].id;
-    const result = moveNote(song, id, 0, 62); // D4
+    const comp = addNote(BASE, 60, 0);
+    const id = comp.notes[0].id;
+    const result = moveNote(comp, id, 0, 62); // D4
     expect(result.notes[0].spelledPitch).toEqual({ letter: 'D', accidental: 0, octave: 4 });
   });
 
@@ -134,9 +135,9 @@ describe('addChord', () => {
     expect(result.notes.every(n => n.spelledPitch !== undefined)).toBe(true);
   });
 
-  it('assigns streamId to all notes', () => {
-    const result = addChord(BASE, 60, 0, 1, MAJ_INTERVALS, 'sid');
-    expect(result.notes.every(n => n.streamId === 'sid')).toBe(true);
+  it('assigns partId to all notes', () => {
+    const result = addChord(BASE, 60, 0, 1, MAJ_INTERVALS, 'pid');
+    expect(result.notes.every(n => n.partId === 'pid')).toBe(true);
   });
 });
 
@@ -161,26 +162,26 @@ describe('findNextChordTone', () => {
   });
 });
 
-// ── spreadChordAcrossStreams ───────────────────────────────────────────────────
+// ── spreadChordAcrossParts ───────────────────────────────────────────────────
 
-describe('spreadChordAcrossStreams', () => {
-  const streams = [
-    { id: 'sa', name: 'A', color: '#fff' },
-    { id: 'sb', name: 'B', color: '#000' },
-    { id: 'sc', name: 'C', color: '#aaa' },
+describe('spreadChordAcrossParts', () => {
+  const parts = [
+    { id: 'pa', trackId: 't1' },
+    { id: 'pb', trackId: 't2' },
+    { id: 'pc', trackId: 't3' },
   ];
-  const song: Song = { ...BASE, streams };
+  const comp: Composition = { ...BASE, parts };
   const MAJ_INTERVALS = [0, 4, 7];
 
-  it('assigns one note per stream', () => {
-    const result = spreadChordAcrossStreams(song, 60, 0, 1, MAJ_INTERVALS);
+  it('assigns one note per part', () => {
+    const result = spreadChordAcrossParts(comp, 60, 0, 1, MAJ_INTERVALS);
     expect(result.notes).toHaveLength(3);
   });
 
-  it('distributes pitches low to high across streams', () => {
-    const result = spreadChordAcrossStreams(song, 60, 0, 1, MAJ_INTERVALS);
-    const pitchesByStream = streams.map(s => result.notes.find(n => n.streamId === s.id)!.pitch);
-    // stream[0]=root(60), stream[1]=next above 60 (E4=64), stream[2]=next above 64 (G4=67)
-    expect(pitchesByStream).toEqual([60, 64, 67]);
+  it('distributes pitches low to high across parts', () => {
+    const result = spreadChordAcrossParts(comp, 60, 0, 1, MAJ_INTERVALS);
+    const pitchesByPart = parts.map(p => result.notes.find(n => n.partId === p.id)!.pitch);
+    // part[0]=root(60), part[1]=next above 60 (E4=64), part[2]=next above 64 (G4=67)
+    expect(pitchesByPart).toEqual([60, 64, 67]);
   });
 });

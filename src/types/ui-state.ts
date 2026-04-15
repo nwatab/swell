@@ -1,4 +1,4 @@
-import type { Song } from './song';
+import type { Composition } from './song';
 import type { NoteDiff } from '../lib/diff';
 
 export type { SnapDiv } from '../lib/snap';
@@ -7,7 +7,7 @@ export type { ChordType } from '../lib/music/chord';
 export type SuggestionState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'ready'; suggestedSong: Song; diff: NoteDiff };
+  | { status: 'ready'; suggestedComposition: Composition; diff: NoteDiff };
 
 export type DragState = {
   noteId: string;

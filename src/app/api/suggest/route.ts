@@ -1,20 +1,23 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
-import type { Song } from '../../../types/song';
+import type { Composition } from '../../../types/song';
 
 const client = new Anthropic();
 
 const SYSTEM_PROMPT = `You are a music composition assistant for a piano roll editor.
 The user will describe a change they want to make to their composition, and you must output ONLY a valid JSON object — nothing else.
 
-The song uses this format:
+The composition uses this format:
 {
-  "version": "1.0",
+  "id": string,
+  "version": "2.0",
   "bpm": number,
   "beatsPerMeasure": number (usually 4),
   "totalBeats": number,
   "globalKey": { "root": "C"|"C#"|"D"|...|"B", "mode": "major"|"minor" } (optional),
   "modulations": [ { "beat": number, "key": { "root": ..., "mode": ... } } ] (optional),
+  "tracks": [ { "id": string, "name": string, "color": string } ] (optional),
+  "parts": [ { "id": string, "trackId": string, "voice": string (optional) } ] (optional),
   "notes": [
     {
       "id": string,
@@ -23,7 +26,7 @@ The song uses this format:
       "durationBeats": number,
       "velocity": number,
       "spelledPitch": { "letter": "C"|"D"|"E"|"F"|"G"|"A"|"B", "accidental": -1|0|1, "octave": number } (optional),
-      "streamId": string (optional)
+      "partId": string (optional)
     }
   ]
 }
@@ -49,8 +52,8 @@ Rules:
 - Do NOT change version, beatsPerMeasure unless explicitly asked`;
 
 export async function POST(req: NextRequest) {
-  const { song, instruction } = (await req.json()) as {
-    song: Song;
+  const { composition, instruction } = (await req.json()) as {
+    composition: Composition;
     instruction: string;
   };
 
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: 'user',
-          content: `Current song state:\n${JSON.stringify(song, null, 2)}\n\nInstruction: ${instruction}`,
+          content: `Current composition state:\n${JSON.stringify(composition, null, 2)}\n\nInstruction: ${instruction}`,
         },
       ],
     });
@@ -80,8 +83,8 @@ export async function POST(req: NextRequest) {
     const raw = textBlock.text.replace(/^```[a-z]*\n?/gm, '').replace(/```$/gm, '').trim();
 
     try {
-      const suggestedSong: Song = JSON.parse(raw);
-      return NextResponse.json({ suggestedSong });
+      const suggestedComposition: Composition = JSON.parse(raw);
+      return NextResponse.json({ suggestedComposition });
     } catch {
       return NextResponse.json(
         { error: 'Model returned invalid JSON', raw: textBlock.text },
