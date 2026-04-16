@@ -43,7 +43,7 @@ function BlackKey({ pitch, globalKey }: { pitch: number; globalKey: KeySignature
 
 interface KeyboardProps {
   globalKey: KeySignature;
-  scrollRef: RefObject<HTMLDivElement>;
+  scrollRef: RefObject<HTMLDivElement | null>;
 }
 
 export default function Keyboard({ globalKey, scrollRef }: KeyboardProps) {
