@@ -3,7 +3,7 @@
 ## Stack Constraints
 
 - Framework: Next.js (App Router)
-- Music theory logic: Tonal.js のみ。音程計算・スケール生成を独自実装するな
+- Music theory logic: `lib/music/` に実装。Tonal.js 等の外部ライブラリは使わない
 - Notation rendering: VexFlow のみ
 - LLM calls: Claude API（claude-sonnet-4-20250514）経由のみ
 

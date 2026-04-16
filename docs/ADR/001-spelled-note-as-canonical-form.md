@@ -49,10 +49,10 @@ MIDI pitch は `spelledPitchToMidi(sp)` で常に導出する。
 
 - MIDI インポート時に pitch spelling problem（MIDI整数 → SpelledNote の推定）が発生する。
   当面は全音符を non-diatonic 扱いにして回避する。
-- 既存の MIDI ベースのライブラリ（Tone.js 等）とのインターフェースで変換が必要
+- MIDI ベースのインターフェース（外部ツール等）との変換が必要になる場合がある
 - データサイズがやや増加（整数1つ → オブジェクト1つ）
 
 ## Notes
 
 - 音楽情報検索（MIR）分野では pitch spelling problem として知られる（Meredith, 2006）
-- Tonal.js は内部的に spelled pitch を扱っており、SpelledNote との相互変換は比較的容易
+- 音楽理論ライブラリ全般、内部的に spelled pitch を扱う設計が多く、本モデルとの親和性は高い
