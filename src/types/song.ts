@@ -3,17 +3,17 @@
 
 import { genId } from '../lib/id';
 
-export interface Track {
+export type VoiceRole = 'soprano' | 'alto' | 'tenor' | 'bass' | (string & {});
+
+/**
+ * A musical part (voice / instrument role). First-class domain concept.
+ * Track (SMF MTrk) is a persistence/export detail — it does not appear in
+ * the domain model. See design discussion: Part ≠ Track.
+ */
+export interface Part {
   readonly id: string;
   readonly name: string;
   readonly color: string; // hex color, e.g. '#60a5fa'
-}
-
-export type VoiceRole = 'soprano' | 'alto' | 'tenor' | 'bass' | (string & {});
-
-export interface Part {
-  readonly id: string;
-  readonly trackId: string;
   readonly voice?: VoiceRole;
 }
 
@@ -150,7 +150,6 @@ export interface Composition {
   readonly beatsPerMeasure: number;
   readonly totalBeats: number;
   readonly notes: readonly Note[];
-  readonly tracks: readonly Track[];
   readonly parts: readonly Part[];
   /** Global key signature (applies from beat 0 unless overridden by modulations). */
   readonly globalKey: KeySignature;
@@ -170,7 +169,6 @@ export const DEFAULT_COMPOSITION: Composition = {
   beatsPerMeasure: 4,
   totalBeats: 32,
   notes: [],
-  tracks: [],
   parts: [],
   globalKey: { root: 'C', mode: 'major' },
 };

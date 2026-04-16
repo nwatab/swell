@@ -13,7 +13,7 @@ import { genId } from '../id';
 
 const C_MAJOR: KeySignature = { root: 'C', mode: 'major' };
 const BASE: Composition = {
-  id: genId(), version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], tracks: [],
+  id: genId(), version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [],
   parts: [], globalKey: C_MAJOR,
 };
 
@@ -166,9 +166,9 @@ describe('findNextChordTone', () => {
 
 describe('spreadChordAcrossParts', () => {
   const parts = [
-    { id: 'pa', trackId: 't1' },
-    { id: 'pb', trackId: 't2' },
-    { id: 'pc', trackId: 't3' },
+    { id: 'pa', name: 'Bass',   color: '#f87171' },
+    { id: 'pb', name: 'Tenor',  color: '#fbbf24' },
+    { id: 'pc', name: 'Soprano', color: '#60a5fa' },
   ];
   const comp: Composition = { ...BASE, parts };
   const MAJ_INTERVALS = [0, 4, 7];

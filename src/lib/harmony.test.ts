@@ -23,7 +23,7 @@ const A_MINOR:  KeySignature = { root: 'A',  mode: 'minor' };
 const CS_MAJOR: KeySignature = { root: 'C#', mode: 'major' };
 
 const BASE_COMPOSITION: Composition = {
-  id: genId(), version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], tracks: [],
+  id: genId(), version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [],
   parts: [], globalKey: C_MAJOR,
 };
 

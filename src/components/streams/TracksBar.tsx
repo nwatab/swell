@@ -1,34 +1,34 @@
 'use client';
 
-import type { Track } from '../../types/song';
+import type { Part } from '../../types/song';
 import TrackNameInput from './TrackNameInput';
 
-interface TracksBarProps {
-  tracks: readonly Track[];
+interface PartsBarProps {
+  parts: readonly Part[];
   activePartId: string | null;
   onActivePartChange: (id: string | null) => void;
-  onAddTrack: () => void;
-  onRemoveTrack: (id: string) => void;
-  onRenameTrack: (id: string, name: string) => void;
+  onAddPart: () => void;
+  onRemovePart: (id: string) => void;
+  onRenamePart: (id: string, name: string) => void;
   onApplySATB: () => void;
   spreadChord: boolean;
   onSpreadChordToggle: () => void;
 }
 
 export default function TracksBar({
-  tracks,
+  parts,
   activePartId,
   onActivePartChange,
-  onAddTrack,
-  onRemoveTrack,
-  onRenameTrack,
+  onAddPart,
+  onRemovePart,
+  onRenamePart,
   onApplySATB,
   spreadChord,
   onSpreadChordToggle,
-}: TracksBarProps) {
+}: PartsBarProps) {
   return (
     <div className="flex items-center gap-2 px-4 bg-zinc-900 border-b border-zinc-700 h-10 flex-shrink-0 overflow-x-auto">
-      <span className="text-xs text-zinc-500 flex-shrink-0">Tracks</span>
+      <span className="text-xs text-zinc-500 flex-shrink-0">Parts</span>
 
       {/* "none" selector */}
       <button
@@ -39,33 +39,33 @@ export default function TracksBar({
             ? 'bg-zinc-500 text-white'
             : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
         ].join(' ')}
-        title="No track (untagged)"
+        title="No part (untagged)"
       >
         —
       </button>
 
-      {/* Per-track buttons */}
-      {tracks.map(track => (
-        <div key={track.id} className="flex items-center flex-shrink-0">
+      {/* Per-part buttons */}
+      {parts.map(part => (
+        <div key={part.id} className="flex items-center flex-shrink-0">
           <button
-            onClick={() => onActivePartChange(track.id)}
+            onClick={() => onActivePartChange(part.id)}
             className={[
               'flex items-center gap-1.5 px-2 py-1 rounded-l text-xs font-medium transition-colors',
-              activePartId === track.id ? 'bg-zinc-600' : 'bg-zinc-700 hover:bg-zinc-600',
+              activePartId === part.id ? 'bg-zinc-600' : 'bg-zinc-700 hover:bg-zinc-600',
             ].join(' ')}
-            style={{ color: track.color }}
+            style={{ color: part.color }}
           >
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: track.color }} />
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: part.color }} />
             <TrackNameInput
-              name={track.name}
-              color={track.color}
-              onRename={name => onRenameTrack(track.id, name)}
+              name={part.name}
+              color={part.color}
+              onRename={name => onRenamePart(part.id, name)}
             />
           </button>
           <button
-            onClick={() => onRemoveTrack(track.id)}
+            onClick={() => onRemovePart(part.id)}
             className="px-1.5 py-1 rounded-r bg-zinc-700 hover:bg-zinc-600 text-zinc-500 hover:text-zinc-300 text-xs border-l border-zinc-600 transition-colors"
-            title="Remove track"
+            title="Remove part"
           >
             ×
           </button>
@@ -73,22 +73,22 @@ export default function TracksBar({
       ))}
 
       <button
-        onClick={onAddTrack}
+        onClick={onAddPart}
         className="px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-xs text-zinc-300 transition-colors flex-shrink-0"
-        title="Add track"
+        title="Add part"
       >
         +
       </button>
       <button
         onClick={onApplySATB}
         className="px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-xs text-zinc-400 transition-colors flex-shrink-0"
-        title="Replace tracks with SATB preset (Bass → Tenor → Alto → Soprano)"
+        title="Replace parts with SATB preset (Bass → Tenor → Alto → Soprano)"
       >
         SATB
       </button>
       <button
         onClick={onSpreadChordToggle}
-        disabled={tracks.length < 2}
+        disabled={parts.length < 2}
         className={[
           'px-2 py-1 rounded text-xs transition-colors flex-shrink-0 font-mono disabled:opacity-30',
           spreadChord

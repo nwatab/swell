@@ -16,8 +16,7 @@ The composition uses this format:
   "totalBeats": number,
   "globalKey": { "root": "C"|"C#"|"D"|...|"B", "mode": "major"|"minor" } (optional),
   "modulations": [ { "beat": number, "key": { "root": ..., "mode": ... } } ] (optional),
-  "tracks": [ { "id": string, "name": string, "color": string } ] (optional),
-  "parts": [ { "id": string, "trackId": string, "voice": string (optional) } ] (optional),
+  "parts": [ { "id": string, "name": string, "color": string, "voice": string (optional) } ] (optional),
   "notes": [
     {
       "id": string,

@@ -9,7 +9,6 @@ const BASE: Composition = {
   beatsPerMeasure: 4,
   totalBeats: 16,
   notes: [],
-  tracks: [],
   parts: [],
   globalKey: { root: 'C', mode: 'major' },
 };

@@ -1,7 +1,7 @@
-import type { Composition, Track, VoiceRole } from '../../types/song';
+import type { Composition, Part, VoiceRole } from '../../types/song';
 import { genId } from '../id';
 
-const TRACK_COLORS = [
+const PART_COLORS = [
   '#60a5fa', // blue
   '#34d399', // emerald
   '#fbbf24', // amber
@@ -16,36 +16,33 @@ const TRACK_COLORS = [
 const SATB_NAMES  = ['Bass', 'Tenor', 'Alto', 'Soprano'] as const;
 const SATB_COLORS = ['#f87171', '#fbbf24', '#34d399', '#60a5fa'] as const;
 
-export const nextTrackColor = (tracks: readonly Track[]): string => {
-  const used = new Set(tracks.map(s => s.color));
-  return TRACK_COLORS.find(c => !used.has(c)) ?? TRACK_COLORS[tracks.length % TRACK_COLORS.length];
+export const nextPartColor = (parts: readonly Part[]): string => {
+  const used = new Set(parts.map(p => p.color));
+  return PART_COLORS.find(c => !used.has(c)) ?? PART_COLORS[parts.length % PART_COLORS.length];
 };
 
-export const addTrackToComposition = (composition: Composition, name: string, color: string): Composition => ({
+export const addPartToComposition = (composition: Composition, name: string, color: string): Composition => ({
   ...composition,
-  tracks: [...composition.tracks, { id: genId(), name, color }],
+  parts: [...composition.parts, { id: genId(), name, color }],
 });
 
-export const removeTrackFromComposition = (composition: Composition, trackId: string): Composition => ({
+export const removePartFromComposition = (composition: Composition, partId: string): Composition => ({
   ...composition,
-  tracks: composition.tracks.filter(s => s.id !== trackId),
-  parts: composition.parts.filter(p => p.trackId !== trackId),
-  notes: composition.notes.map(n => n.partId === trackId ? { ...n, partId: undefined } : n),
+  parts: composition.parts.filter(p => p.id !== partId),
+  notes: composition.notes.map(n => n.partId === partId ? { ...n, partId: undefined } : n),
 });
 
-export const renameTrack = (composition: Composition, trackId: string, name: string): Composition => ({
+export const renamePart = (composition: Composition, partId: string, name: string): Composition => ({
   ...composition,
-  tracks: composition.tracks.map(s => s.id === trackId ? { ...s, name } : s),
+  parts: composition.parts.map(p => p.id === partId ? { ...p, name } : p),
 });
 
 export const applySATB = (composition: Composition): Composition => {
-  const tracks = SATB_NAMES.map((name, i) => ({
-    id: genId(), name, color: SATB_COLORS[i],
-  }));
-  const parts = tracks.map((track, i) => ({
+  const parts: Part[] = SATB_NAMES.map((name, i) => ({
     id: genId(),
-    trackId: track.id,
-    voice: SATB_NAMES[i].toLowerCase() as VoiceRole,
+    name,
+    color: SATB_COLORS[i],
+    voice: name.toLowerCase() as VoiceRole,
   }));
-  return { ...composition, tracks, parts };
+  return { ...composition, parts };
 };

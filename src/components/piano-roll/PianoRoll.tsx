@@ -26,7 +26,7 @@ import Playhead from './Playhead';
 export default function PianoRoll() {
   const comp = useComposition();
   const { composition, setComposition, globalKey, setGlobalKey, activePartId, setActivePartId, spreadChord, setSpreadChord,
-    handleAddTrack, handleRemoveTrack, handleRenameTrack, handleApplySATB,
+    handleAddPart, handleRemovePart, handleRenamePart, handleApplySATB,
     handleExport, handleImport, handleBpmChange } = comp;
 
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
@@ -93,12 +93,12 @@ export default function PianoRoll() {
         onGlobalKeyChange={setGlobalKey}
       />
       <TracksBar
-        tracks={composition.tracks}
+        parts={composition.parts}
         activePartId={activePartId}
         onActivePartChange={setActivePartId}
-        onAddTrack={handleAddTrack}
-        onRemoveTrack={handleRemoveTrack}
-        onRenameTrack={handleRenameTrack}
+        onAddPart={handleAddPart}
+        onRemovePart={handleRemovePart}
+        onRenamePart={handleRenamePart}
         onApplySATB={handleApplySATB}
         spreadChord={spreadChord}
         onSpreadChordToggle={() => setSpreadChord(v => !v)}

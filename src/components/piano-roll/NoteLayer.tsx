@@ -45,7 +45,7 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
         if (note.pitch < MIN_PITCH || note.pitch > MAX_PITCH) return null;
         const trackColor =
           variant === 'normal' || variant === 'dragging'
-            ? activeComposition.tracks.find(s => s.id === note.partId)?.color
+            ? activeComposition.parts.find(p => p.id === note.partId)?.color
             : undefined;
         return (
           <NoteBlock

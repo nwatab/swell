@@ -7,10 +7,10 @@ import { keyAtBeat, applyKeyTransform } from '../lib/harmony';
 import { annotateNote } from '../lib/music/note-operations';
 import { downloadSwell } from '../lib/swell-format/serialize';
 import {
-  nextTrackColor,
-  addTrackToComposition,
-  removeTrackFromComposition,
-  renameTrack,
+  nextPartColor,
+  addPartToComposition,
+  removePartFromComposition,
+  renamePart,
   applySATB,
 } from '../lib/music/part';
 
@@ -23,9 +23,9 @@ export interface UseCompositionReturn {
   setActivePartId: React.Dispatch<React.SetStateAction<string | null>>;
   spreadChord: boolean;
   setSpreadChord: React.Dispatch<React.SetStateAction<boolean>>;
-  handleAddTrack: () => void;
-  handleRemoveTrack: (trackId: string) => void;
-  handleRenameTrack: (trackId: string, name: string) => void;
+  handleAddPart: () => void;
+  handleRemovePart: (partId: string) => void;
+  handleRenamePart: (partId: string, name: string) => void;
   handleApplySATB: () => void;
   handleExport: () => void;
   handleImport: (imported: Composition) => void;
@@ -55,23 +55,23 @@ export const useComposition = (): UseCompositionReturn => {
     });
   }, []);
 
-  const handleAddTrack = useCallback(() => {
+  const handleAddPart = useCallback(() => {
     setComposition(s => {
-      const color = nextTrackColor(s.tracks);
-      const name = `Track ${s.tracks.length + 1}`;
-      const updated = addTrackToComposition(s, name, color);
-      setActivePartId(updated.tracks[updated.tracks.length - 1].id);
+      const color = nextPartColor(s.parts);
+      const name = `Part ${s.parts.length + 1}`;
+      const updated = addPartToComposition(s, name, color);
+      setActivePartId(updated.parts[updated.parts.length - 1].id);
       return updated;
     });
   }, []);
 
-  const handleRemoveTrack = useCallback((trackId: string) => {
-    setComposition(s => removeTrackFromComposition(s, trackId));
-    setActivePartId(id => id === trackId ? null : id);
+  const handleRemovePart = useCallback((partId: string) => {
+    setComposition(s => removePartFromComposition(s, partId));
+    setActivePartId(id => id === partId ? null : id);
   }, []);
 
-  const handleRenameTrack = useCallback((trackId: string, name: string) => {
-    setComposition(s => renameTrack(s, trackId, name));
+  const handleRenamePart = useCallback((partId: string, name: string) => {
+    setComposition(s => renamePart(s, partId, name));
   }, []);
 
   const handleApplySATB = useCallback(() => {
@@ -97,9 +97,9 @@ export const useComposition = (): UseCompositionReturn => {
     setActivePartId,
     spreadChord,
     setSpreadChord,
-    handleAddTrack,
-    handleRemoveTrack,
-    handleRenameTrack,
+    handleAddPart,
+    handleRemovePart,
+    handleRenamePart,
     handleApplySATB,
     handleExport,
     handleImport,

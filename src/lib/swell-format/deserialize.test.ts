@@ -7,7 +7,6 @@ const VALID_COMPOSITION = JSON.stringify({
   beatsPerMeasure: 4,
   totalBeats: 32,
   notes: [],
-  tracks: [],
   parts: [],
   globalKey: { root: 'C', mode: 'major' },
 });
@@ -18,7 +17,6 @@ describe('parseSwell', () => {
     expect(comp.version).toBe('2.0');
     expect(comp.bpm).toBe(120);
     expect(comp.notes).toEqual([]);
-    expect(comp.tracks).toEqual([]);
     expect(comp.parts).toEqual([]);
   });
 
@@ -37,16 +35,15 @@ describe('parseSwell', () => {
     expect(() => parseSwell(bad)).toThrow('Invalid notes');
   });
 
-  it('defaults missing tracks to empty array', () => {
-    const noTracks = JSON.stringify({ id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], globalKey: { root: 'C', mode: 'major' } });
-    const comp = parseSwell(noTracks);
-    expect(comp.tracks).toEqual([]);
+  it('defaults missing parts to empty array', () => {
+    const noParts = JSON.stringify({ id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], globalKey: { root: 'C', mode: 'major' } });
+    const comp = parseSwell(noParts);
     expect(comp.parts).toEqual([]);
   });
 
   it('preserves globalKey', () => {
     const withKey = JSON.stringify({
-      id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], tracks: [], parts: [],
+      id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], parts: [],
       globalKey: { root: 'G', mode: 'major' },
     });
     const comp = parseSwell(withKey);
@@ -54,7 +51,7 @@ describe('parseSwell', () => {
   });
 
   it('throws when globalKey is absent', () => {
-    const noKey = JSON.stringify({ id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], tracks: [], parts: [] });
+    const noKey = JSON.stringify({ id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], parts: [] });
     expect(() => parseSwell(noKey)).toThrow('Missing globalKey');
   });
 
