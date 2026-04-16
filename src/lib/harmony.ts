@@ -14,6 +14,7 @@ import type {
   SpelledPitch,
   NoteLetter,
   Accidental,
+  VoiceRole,
 } from '../types/song';
 import { PITCH_CLASS_NAMES } from '../types/song';
 
@@ -364,10 +365,19 @@ export const computeNoteFunctions = (song: Composition): NoteFunctionMap => {
 
 export type DiagnosticSeverity = 'error' | 'warning' | 'info';
 export type DiagnosticType =
-  | 'parallel-fifth'
-  | 'parallel-octave'
-  | 'voice-crossing'
-  | 'out-of-scale';
+  // ── Confirmed errors (hard rules in 芸大和声) ──────────────────────────────
+  | 'parallel-fifth'          // 並行5度
+  | 'parallel-octave'         // 並行8度
+  | 'hidden-fifth'            // 隠伏5度 (outer voices, leap to P5)
+  | 'hidden-octave'           // 隠伏8度 (outer voices, leap to P8)
+  // ── Warnings (context-dependent) ──────────────────────────────────────────
+  | 'voice-crossing'          // 声部交差
+  | 'voice-overlap'           // 声部追い越し
+  | 'range-violation'         // SATB 声域逸脱
+  | 'augmented-melodic-interval' // 増音程の旋律 (augmented 2nd, tritone)
+  | 'leading-tone-descent'    // 導音の下行 (leading tone resolves down instead of up)
+  // ── Info ──────────────────────────────────────────────────────────────────
+  | 'out-of-scale';           // スケール外音
 
 export interface Diagnostic {
   readonly severity: DiagnosticSeverity;
@@ -379,6 +389,50 @@ export interface Diagnostic {
   readonly beat: number;
 }
 
+// ── SATB comfortable ranges ───────────────────────────────────────────────────
+// Standard comfortable ranges (MIDI). Warn when exceeded, not error.
+
+const SATB_RANGES: Partial<Record<VoiceRole, { readonly min: number; readonly max: number }>> = {
+  soprano: { min: 60, max: 79 },  // C4 – G5
+  alto:    { min: 55, max: 72 },  // G3 – C5
+  tenor:   { min: 48, max: 67 },  // C3 – G4
+  bass:    { min: 40, max: 60 },  // E2 – C4
+};
+
+// ── Interval helpers ──────────────────────────────────────────────────────────
+
+const LETTER_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
+
+/**
+ * Returns the generic interval size (1=unison, 2=2nd, 3=3rd …) between two
+ * SpelledPitches, ignoring direction.
+ */
+const genericInterval = (a: SpelledPitch, b: SpelledPitch): number => {
+  const ai = LETTER_ORDER.indexOf(a.letter);
+  const bi = LETTER_ORDER.indexOf(b.letter);
+  const octaveDiff = Math.abs(b.octave - a.octave);
+  const letterDiff = ((bi - ai + 7) % 7);
+  return octaveDiff * 7 + letterDiff + 1; // 1-based
+};
+
+/**
+ * True when two consecutive SpelledPitches form an augmented 2nd (3 semitones,
+ * letter distance = 2nd) or a melodic tritone (augmented 4th / diminished 5th).
+ * These are forbidden as melodic intervals in 芸大和声.
+ */
+const isForbiddenMelodicInterval = (a: SpelledPitch, b: SpelledPitch): boolean => {
+  const midiA = (a.octave + 1) * 12 + LETTER_SEMITONES[a.letter] + a.accidental;
+  const midiB = (b.octave + 1) * 12 + LETTER_SEMITONES[b.letter] + b.accidental;
+  const semitones = Math.abs(midiB - midiA);
+  const gen = genericInterval(a, b);
+
+  // Augmented 2nd: generic 2nd (gen=2) with 3 semitones
+  if (gen === 2 && semitones === 3) return true;
+  // Augmented 4th / diminished 5th (tritone): 6 semitones
+  if ((gen === 4 || gen === 5) && semitones === 6) return true;
+  return false;
+};
+
 // ── Harmony analysis ──────────────────────────────────────────────────────────
 
 const pitchLabel = (midi: number, key: KeySignature): string => {
@@ -389,19 +443,22 @@ const pitchLabel = (midi: number, key: KeySignature): string => {
 };
 
 /**
- * Analyze a song for common harmony violations.
+ * Analyze a composition for harmony violations.
  *
- * Detects:
- *   - Out-of-scale notes (info) when globalKey is set
- *   - Parallel 5ths (error) between voiced parts
- *   - Parallel octaves (error) between voiced parts
- *   - Voice crossing (warning) when voices swap registers
+ * Detects (in order of severity):
+ *   Error:   parallel 5ths/8ths, hidden 5ths/8ths (outer voices)
+ *   Warning: voice crossing, voice overlap, range violations,
+ *            augmented melodic intervals, leading tone descent
+ *   Info:    out-of-scale notes
  */
 export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
   const diags: Diagnostic[] = [];
 
   // ── 1. Out-of-scale notes ──────────────────────────────────────────────────
+  // Only flag notes with no chord_tone binding — chord tones may be intentionally
+  // chromatic (e.g. G# as the third of V in A minor). See ADR-008.
   for (const note of song.notes) {
+    if (note.binding?.kind === 'chord_tone') continue;
     const key = keyAtBeat(song, note.startBeat);
     if (!isDiatonicPitch(note.pitch, key)) {
       diags.push({
@@ -414,15 +471,45 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
     }
   }
 
-  // ── Part-based analysis (needs at least 2 voiced parts) ──────────────
+  // ── Part-based analysis (needs at least 2 voiced parts) ───────────────────
   const partedNotes = song.notes.filter(n => n.partId);
   const partIds = [...new Set(partedNotes.map(n => n.partId!))];
   if (partIds.length < 2) return diags;
 
-  // Unique beats, sorted
-  const beats = [...new Set(partedNotes.map(n => n.startBeat))].sort((a, b) => a - b);
+  // Voice timelines: sorted notes per part (for consecutive-note analysis)
+  const voiceTimelines = new Map<string, Note[]>();
+  for (const n of partedNotes) {
+    if (!voiceTimelines.has(n.partId!)) voiceTimelines.set(n.partId!, []);
+    voiceTimelines.get(n.partId!)!.push(n);
+  }
+  for (const notes of voiceTimelines.values()) {
+    notes.sort((a, b) => a.startBeat - b.startBeat);
+  }
 
-  // Map beat → (partId → Note)
+  // Voice role lookup (soprano/alto/tenor/bass from Part metadata)
+  const partVoice = new Map<string, VoiceRole | undefined>(
+    partIds.map(id => [id, song.parts.find(p => p.id === id)?.voice]),
+  );
+
+  // Ordered parts by expected register (low → high), prefer explicit voice labels
+  const VOICE_ORDER: VoiceRole[] = ['bass', 'tenor', 'alto', 'soprano'];
+  const avgPitch = new Map(
+    partIds.map(id => {
+      const notes = partedNotes.filter(n => n.partId === id);
+      return [id, notes.reduce((s, n) => s + n.pitch, 0) / notes.length];
+    }),
+  );
+  const orderedParts = [...partIds].sort((a, b) => {
+    const va = VOICE_ORDER.indexOf(partVoice.get(a) as VoiceRole);
+    const vb = VOICE_ORDER.indexOf(partVoice.get(b) as VoiceRole);
+    if (va !== -1 && vb !== -1) return va - vb; // both labeled: use SATB order
+    if (va !== -1) return -1;
+    if (vb !== -1) return 1;
+    return (avgPitch.get(a) ?? 0) - (avgPitch.get(b) ?? 0); // fallback: avg pitch
+  });
+
+  // Snapshots: beat → (partId → Note)
+  const beats = [...new Set(partedNotes.map(n => n.startBeat))].sort((a, b) => a - b);
   const snapshots = beats.map(beat => {
     const map = new Map<string, Note>();
     for (const n of partedNotes) {
@@ -431,12 +518,81 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
     return { beat, map };
   });
 
-  // ── 2. Parallel 5ths and octaves ──────────────────────────────────────────
+  // ── 2. SATB range violations ───────────────────────────────────────────────
+  for (const [partId, notes] of voiceTimelines) {
+    const voice = partVoice.get(partId);
+    if (!voice) continue;
+    const range = SATB_RANGES[voice];
+    if (!range) continue;
+    for (const note of notes) {
+      if (note.pitch < range.min || note.pitch > range.max) {
+        const dir = note.pitch < range.min ? 'low' : 'high';
+        diags.push({
+          severity: 'warning',
+          type: 'range-violation',
+          message: `${voice} ${pitchLabel(note.pitch, keyAtBeat(song, note.startBeat))} is too ${dir} for the ${voice} range`,
+          noteIds: [note.id],
+          beat: note.startBeat,
+        });
+      }
+    }
+  }
+
+  // ── 3. Augmented melodic intervals ────────────────────────────────────────
+  for (const notes of voiceTimelines.values()) {
+    for (let i = 1; i < notes.length; i++) {
+      const prev = notes[i - 1];
+      const curr = notes[i];
+      if (!prev.spelledPitch || !curr.spelledPitch) continue;
+      if (isForbiddenMelodicInterval(prev.spelledPitch, curr.spelledPitch)) {
+        const key = keyAtBeat(song, curr.startBeat);
+        const from = spelledPitchToString(prev.spelledPitch);
+        const to   = spelledPitchToString(curr.spelledPitch);
+        diags.push({
+          severity: 'warning',
+          type: 'augmented-melodic-interval',
+          message: `Augmented/tritone melodic interval ${from}→${to} at beat ${curr.startBeat + 1}`,
+          noteIds: [prev.id, curr.id],
+          beat: curr.startBeat,
+        });
+        void key; // key available for future message improvements
+      }
+    }
+  }
+
+  // ── 4. Leading tone descent ────────────────────────────────────────────────
+  // Heuristic: if a voice moves FROM the leading tone (1 semitone below tonic)
+  // DOWNWARD (not to tonic), flag it. This catches the most common error in
+  // student exercises: leading tone resolving down instead of up.
+  // Full V→I context detection (chord-aware) is deferred pending F03.
+  for (const notes of voiceTimelines.values()) {
+    for (let i = 1; i < notes.length; i++) {
+      const prev = notes[i - 1];
+      const curr = notes[i];
+      const key = keyAtBeat(song, prev.startBeat);
+      const tonicPc = ((PITCH_CLASS_NAMES.indexOf(key.root)) + 12) % 12;
+      const leadingPc = (tonicPc + 11) % 12;
+      const prevPc = ((prev.pitch % 12) + 12) % 12;
+      if (prevPc !== leadingPc) continue;
+      if (curr.pitch >= prev.pitch) continue; // ascending or static — fine
+      // Descending from leading tone: warn unless it's to the dominant (5th)
+      const dominantPc = (tonicPc + 7) % 12;
+      const currPc = ((curr.pitch % 12) + 12) % 12;
+      if (currPc === dominantPc) continue; // 7→5 in inner voice is acceptable exception
+      diags.push({
+        severity: 'warning',
+        type: 'leading-tone-descent',
+        message: `Leading tone ${pitchLabel(prev.pitch, key)} resolves downward at beat ${curr.startBeat + 1} (should rise to tonic)`,
+        noteIds: [prev.id, curr.id],
+        beat: curr.startBeat,
+      });
+    }
+  }
+
+  // ── 5. Parallel 5ths and octaves ──────────────────────────────────────────
   for (let i = 1; i < snapshots.length; i++) {
     const prev = snapshots[i - 1];
     const curr = snapshots[i];
-
-    // Only check part pairs present in both snapshots
     const commonParts = partIds.filter(id => prev.map.has(id) && curr.map.has(id));
 
     for (let a = 0; a < commonParts.length; a++) {
@@ -449,18 +605,14 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
         const cA = curr.map.get(idA)!.pitch;
         const cB = curr.map.get(idB)!.pitch;
 
-        // Both voices must move (not static)
         const motionA = cA - pA;
         const motionB = cB - pB;
         if (motionA === 0 || motionB === 0) continue;
-
-        // Parallel = same direction
-        if (Math.sign(motionA) !== Math.sign(motionB)) continue;
+        if (Math.sign(motionA) !== Math.sign(motionB)) continue; // contrary = fine
 
         const intervalPrev = Math.abs(pA - pB);
         const intervalCurr = Math.abs(cA - cB);
 
-        // Perfect 5th (7 semitones mod 12)
         if (intervalPrev % 12 === 7 && intervalCurr % 12 === 7) {
           diags.push({
             severity: 'error',
@@ -471,11 +623,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
           });
         }
 
-        // Perfect octave (12 semitones, not unison)
-        if (
-          intervalPrev % 12 === 0 && intervalPrev > 0 &&
-          intervalCurr % 12 === 0 && intervalCurr > 0
-        ) {
+        if (intervalPrev % 12 === 0 && intervalPrev > 0 &&
+            intervalCurr % 12 === 0 && intervalCurr > 0) {
           diags.push({
             severity: 'error',
             type: 'parallel-octave',
@@ -484,22 +633,41 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
             beat: curr.beat,
           });
         }
+
+        // ── 6. Hidden 5ths and octaves (outer voices only) ─────────────────
+        // Same-direction motion to a P5 or P8 where the upper voice leaps (>2 st).
+        const isOuterPair =
+          (orderedParts.indexOf(idA) === 0 && orderedParts.indexOf(idB) === orderedParts.length - 1) ||
+          (orderedParts.indexOf(idB) === 0 && orderedParts.indexOf(idA) === orderedParts.length - 1);
+
+        if (isOuterPair) {
+          // Identify which is the upper voice
+          const upperMotion = cA > cB ? motionA : motionB;
+          if (Math.abs(upperMotion) > 2) { // upper voice leaps
+            if (intervalCurr % 12 === 7) {
+              diags.push({
+                severity: 'error',
+                type: 'hidden-fifth',
+                message: `Hidden 5th between outer voices at beat ${curr.beat + 1} (upper voice leaps to perfect 5th)`,
+                noteIds: [curr.map.get(idA)!.id, curr.map.get(idB)!.id],
+                beat: curr.beat,
+              });
+            } else if (intervalCurr % 12 === 0 && intervalCurr > 0) {
+              diags.push({
+                severity: 'error',
+                type: 'hidden-octave',
+                message: `Hidden octave between outer voices at beat ${curr.beat + 1} (upper voice leaps to octave)`,
+                noteIds: [curr.map.get(idA)!.id, curr.map.get(idB)!.id],
+                beat: curr.beat,
+              });
+            }
+          }
+        }
       }
     }
   }
 
-  // ── 3. Voice crossing ─────────────────────────────────────────────────────
-  // Infer expected ordering from average pitch per part (lower part = lower pitch)
-  const avgPitch = new Map(
-    partIds.map(id => {
-      const notes = partedNotes.filter(n => n.partId === id);
-      return [id, notes.reduce((s, n) => s + n.pitch, 0) / notes.length];
-    }),
-  );
-  const orderedParts = [...partIds].sort(
-    (a, b) => (avgPitch.get(a) ?? 0) - (avgPitch.get(b) ?? 0),
-  );
-
+  // ── 7. Voice crossing ─────────────────────────────────────────────────────
   for (const { beat, map } of snapshots) {
     for (let i = 0; i < orderedParts.length - 1; i++) {
       const lower = orderedParts[i];
@@ -514,6 +682,42 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
           message: `Voice crossing at beat ${beat + 1}`,
           noteIds: [nLower.id, nUpper.id],
           beat,
+        });
+      }
+    }
+  }
+
+  // ── 8. Voice overlap (声部追い越し) ───────────────────────────────────────
+  // A voice moves past the PREVIOUS position of an adjacent voice.
+  for (let i = 1; i < snapshots.length; i++) {
+    const prev = snapshots[i - 1];
+    const curr = snapshots[i];
+    for (let j = 0; j < orderedParts.length - 1; j++) {
+      const lowerId = orderedParts[j];
+      const upperId = orderedParts[j + 1];
+      const prevLower = prev.map.get(lowerId);
+      const prevUpper = prev.map.get(upperId);
+      const currLower = curr.map.get(lowerId);
+      const currUpper = curr.map.get(upperId);
+
+      // Lower voice moves above where upper WAS
+      if (prevUpper && currLower && currLower.pitch > prevUpper.pitch) {
+        diags.push({
+          severity: 'warning',
+          type: 'voice-overlap',
+          message: `Voice overlap at beat ${curr.beat + 1}: lower voice crosses above adjacent voice's previous position`,
+          noteIds: [currLower.id, prevUpper.id],
+          beat: curr.beat,
+        });
+      }
+      // Upper voice moves below where lower WAS
+      if (prevLower && currUpper && currUpper.pitch < prevLower.pitch) {
+        diags.push({
+          severity: 'warning',
+          type: 'voice-overlap',
+          message: `Voice overlap at beat ${curr.beat + 1}: upper voice crosses below adjacent voice's previous position`,
+          noteIds: [currUpper.id, prevLower.id],
+          beat: curr.beat,
         });
       }
     }
