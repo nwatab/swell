@@ -1,5 +1,6 @@
 'use client';
 
+import type { RefObject } from 'react';
 import type { KeySignature } from '../../types/song';
 import { romanNumeral } from '../../lib/harmony';
 import {
@@ -42,12 +43,14 @@ function BlackKey({ pitch, globalKey }: { pitch: number; globalKey: KeySignature
 
 interface KeyboardProps {
   globalKey: KeySignature;
+  scrollRef: RefObject<HTMLDivElement>;
 }
 
-export default function Keyboard({ globalKey }: KeyboardProps) {
+export default function Keyboard({ globalKey, scrollRef }: KeyboardProps) {
   return (
     <div
-      className="flex-shrink-0 overflow-y-auto overflow-x-hidden border-r border-zinc-700"
+      ref={scrollRef}
+      className="flex-shrink-0 overflow-hidden border-r border-zinc-700"
       style={{ width: KEY_W }}
     >
       <div style={{ height: HEADER_H }} className="bg-zinc-800 border-b border-zinc-600" />

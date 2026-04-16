@@ -43,6 +43,13 @@ export default function PianoRoll() {
   const { playing, playhead, togglePlay } = usePlayback(activeComposition);
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const keyboardRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (keyboardRef.current) {
+      keyboardRef.current.scrollTop = e.currentTarget.scrollTop;
+    }
+  };
   const { drag, handleGridMouseDown } = useNoteInteraction({
     composition,
     suggestionStatus: suggestion.status,
@@ -105,10 +112,10 @@ export default function PianoRoll() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <Keyboard globalKey={globalKey} />
+        <Keyboard globalKey={globalKey} scrollRef={keyboardRef} />
 
         {/* Scrollable grid */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto overscroll-none" onScroll={handleScroll}>
           <BeatHeader
             totalBeats={composition.totalBeats}
             beatsPerMeasure={composition.beatsPerMeasure}
