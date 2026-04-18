@@ -46,7 +46,8 @@ export const usePlayback = (activeComposition: Composition): UsePlaybackReturn =
     const tick = () => {
       const elapsed = (performance.now() - playStartWallRef.current) / 1000;
       const beat = elapsed * bps;
-      if (beat >= activeCompositionRef.current.totalBeats) { stopPlayback(); return; }
+      const { measureCount, timeSignature } = activeCompositionRef.current;
+      if (beat >= measureCount * timeSignature.numerator) { stopPlayback(); return; }
       setPlayhead(beat);
       rafRef.current = requestAnimationFrame(tick);
     };

@@ -1,4 +1,4 @@
-import type { Composition } from './song';
+import type { Composition, SpelledPitch } from './song';
 import type { NoteDiff } from '../lib/diff';
 
 export type { SnapDiv } from '../lib/snap';
@@ -12,10 +12,10 @@ export type SuggestionState =
 export type DragState = {
   noteId: string;
   originalBeat: number;
-  originalPitch: number;
-  beatOffset: number; // click position within note
+  originalMidi: number;       // MIDI pitch for hit-test geometry (UI only)
+  beatOffset: number;
   previewBeat: number;
-  previewPitch: number;
+  previewSpelledPitch: SpelledPitch;  // for rendering the drag preview
   hasMoved: boolean;
 };
 

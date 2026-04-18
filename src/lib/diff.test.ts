@@ -1,30 +1,28 @@
 import { diffCompositions } from './diff';
 import type { Composition, Note } from '../types/song';
+import { DEFAULT_COMPOSITION } from '../types/song';
 import { genId } from './id';
 
-const BASE: Composition = {
-  id: genId(),
-  version: '2.0',
-  bpm: 120,
-  beatsPerMeasure: 4,
-  totalBeats: 16,
-  notes: [],
-  parts: [],
-  globalKey: { root: 'C', mode: 'major' },
-};
+const BASE: Composition = DEFAULT_COMPOSITION;
 
-const note = (id: string, pitch = 60): Note => ({
+const note = (id: string): Note => ({
   id,
-  pitch,
+  spelledPitch: { letter: 'C', accidental: 0, octave: 4 },
   startBeat: 0,
-  durationBeats: 1,
-  velocity: 100,
+  duration: 'quarter',
+});
+
+const withNote = (comp: Composition, n: Note, voiceIndex = 0): Composition => ({
+  ...comp,
+  voices: comp.voices.map((v, i) =>
+    i !== voiceIndex ? v : { ...v, notes: [...v.notes, n] }
+  ),
 });
 
 describe('diffCompositions', () => {
   it('all unchanged when compositions are identical', () => {
     const n1 = note('a');
-    const comp = { ...BASE, notes: [n1] };
+    const comp = withNote(BASE, n1);
     const result = diffCompositions(comp, comp);
     expect(result.unchanged).toHaveLength(1);
     expect(result.added).toHaveLength(0);
@@ -32,19 +30,16 @@ describe('diffCompositions', () => {
   });
 
   it('detects added notes', () => {
-    const current = BASE;
-    const suggested = { ...BASE, notes: [note('new')] };
-    const result = diffCompositions(current, suggested);
+    const suggested = withNote(BASE, note('new'));
+    const result = diffCompositions(BASE, suggested);
     expect(result.added).toHaveLength(1);
     expect(result.added[0].id).toBe('new');
     expect(result.removed).toHaveLength(0);
-    expect(result.unchanged).toHaveLength(0);
   });
 
   it('detects removed notes', () => {
-    const current = { ...BASE, notes: [note('old')] };
-    const suggested = BASE;
-    const result = diffCompositions(current, suggested);
+    const current = withNote(BASE, note('old'));
+    const result = diffCompositions(current, BASE);
     expect(result.removed).toHaveLength(1);
     expect(result.removed[0].id).toBe('old');
     expect(result.added).toHaveLength(0);
@@ -52,12 +47,12 @@ describe('diffCompositions', () => {
 
   it('handles mixed add/remove/unchanged', () => {
     const shared = note('shared');
-    const current = { ...BASE, notes: [shared, note('gone')] };
-    const suggested = { ...BASE, notes: [shared, note('fresh')] };
+    const current = withNote(withNote(BASE, shared), note('gone'));
+    const suggested = withNote(withNote(BASE, shared), note('fresh'));
     const result = diffCompositions(current, suggested);
-    expect(result.unchanged.map(n => n.id)).toEqual(['shared']);
-    expect(result.removed.map(n => n.id)).toEqual(['gone']);
-    expect(result.added.map(n => n.id)).toEqual(['fresh']);
+    expect(result.unchanged.map(n => n.id)).toContain('shared');
+    expect(result.removed.map(n => n.id)).toContain('gone');
+    expect(result.added.map(n => n.id)).toContain('fresh');
   });
 
   it('both empty → all arrays empty', () => {

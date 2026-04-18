@@ -3,88 +3,49 @@
 
 import { genId } from '../lib/id';
 
-export type VoiceRole = 'soprano' | 'alto' | 'tenor' | 'bass' | (string & {});
-
-/**
- * A musical part (voice / instrument role). First-class domain concept.
- * Track (SMF MTrk) is a persistence/export detail — it does not appear in
- * the domain model. See design discussion: Part ≠ Track.
- */
-export interface Part {
-  readonly id: string;
-  readonly name: string;
-  readonly color: string; // hex color, e.g. '#60a5fa'
-  readonly voice?: VoiceRole;
-}
-
-// ── Pitched spelling ──────────────────────────────────────────────────────────
+// ── Pitch primitives ──────────────────────────────────────────────────────────
 
 export type NoteLetter = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B';
 export type Accidental = -2 | -1 | 0 | 1 | 2; // 𝄫 ♭ ♮ ♯ 𝄪
 
-/** Enharmonically unambiguous pitch representation (D# ≠ Eb). */
+/** Pitch class without octave. Used for key tonic and chord root (e.g. F#, Bb). */
+export interface PitchClass {
+  readonly letter: NoteLetter;
+  readonly accidental: Accidental;
+}
+
+/** Enharmonically unambiguous pitch. Canonical form — MIDI pitch is derived. */
 export interface SpelledPitch {
   readonly letter: NoteLetter;
   readonly accidental: Accidental;
   readonly octave: number;
 }
 
+// ── Duration ──────────────────────────────────────────────────────────────────
+
+export type NoteDuration = 'whole' | 'half' | 'quarter' | 'eighth';
+
+/** Duration in beats (4/4 context). */
+export const DURATION_BEATS: Record<NoteDuration, number> = {
+  whole:   4,
+  half:    2,
+  quarter: 1,
+  eighth:  0.5,
+};
+
 // ── Key signature ─────────────────────────────────────────────────────────────
 
 export type ScaleMode = 'major' | 'minor';
 // NOTE: Do NOT add 'harmonic-minor' here. The raised 7th in minor is a harmony-level
 // phenomenon (Chord.quality = 'major' on V), not a key-level one. ScaleMode represents
-// the key signature (調号). Future extension is reserved for true modes (Dorian, Mixolydian).
-// See ADR-008.
-
-/** Chromatic pitch class names (sharp-only, matching MIDI convention). */
-export type PitchClassName =
-  | 'C' | 'C#' | 'D' | 'D#' | 'E' | 'F' | 'F#' | 'G' | 'G#' | 'A' | 'A#' | 'B';
-
-export const PITCH_CLASS_NAMES: readonly PitchClassName[] = [
-  'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
-];
+// the key signature (調号). See ADR-008.
 
 export interface KeySignature {
-  readonly root: PitchClassName;
+  readonly tonic: PitchClass;
   readonly mode: ScaleMode;
 }
 
-/** A key change at a specific beat (for mid-composition modulations). */
-export interface Modulation {
-  readonly beat: number;
-  readonly key: KeySignature;
-}
-
-// ── Note binding (author intent) ─────────────────────────────────────────────
-// Declares what the author *intended* a note to be — distinct from NoteFunction
-// (ADR-007) which is the analytical result. See ADR-008.
-
-/** The role a note plays within its chord. */
-export type NoteRole = 'root' | 'third' | 'fifth' | 'seventh' | 'ninth';
-
-/**
- * Author's intent binding for a note. See ADR-008.
- *
- * - absolute:        Exact SpelledPitch — unaffected by key changes.
- * - chord_tone:      Belongs to a specific chord; follows chord root on key change.
- *                    `alteration` is a voice-level semitone adjustment (NOT for chord-defining
- *                    changes like ♭5 or ♯9 — those belong in ChordQuality).
- * - scale_degree:    Follows the scale degree of the current key. Used for modal music.
- *                    `alteration` is a semitone offset from the canonical degree pitch.
- * - non_chord_tone:  An explicitly declared non-harmonic tone. The analytical layer
- *                    (NoteFunction, ADR-007) may confirm or override this declaration.
- *
- * Scope note: NoteRole covers triads + 7th + 9th. sus4/sus2/11th/13th are deferred.
- * See ADR-008 for the chord_tone.alteration vs ChordQuality boundary.
- */
-export type NoteBinding =
-  | { readonly kind: 'absolute' }
-  | { readonly kind: 'chord_tone'; readonly chordId: string; readonly role: NoteRole; readonly alteration: Accidental }
-  | { readonly kind: 'scale_degree'; readonly degree: 1 | 2 | 3 | 4 | 5 | 6 | 7; readonly alteration: Accidental }
-  | { readonly kind: 'non_chord_tone'; readonly function: 'passing' | 'neighbor' | 'appoggiatura' | 'suspension' };
-
-// ── Chord ─────────────────────────────────────────────────────────────────────
+// ── Chord quality ─────────────────────────────────────────────────────────────
 
 /**
  * Quality of a chord.
@@ -102,73 +63,78 @@ export type ChordQuality =
   | 'hdim7'  // half-diminished 7th  [0, 3, 6, 10]  — iiø7
   | 'dim7';  // fully diminished 7th [0, 3, 6,  9]  — vii°7
 
+// ── Harmonic declaration (宣言層) ─────────────────────────────────────────────
+
 /**
- * A declared chord in the composition.
- * Created by the user via Roman numeral input (F03). Notes belonging to this chord
- * carry a `chord_tone` NoteBinding with this chord's id.
+ * Declares the chord intent for a measure. One per measure.
+ * Inversion is not stored — it is derived from the Bass voice's lowest note.
  */
-export interface Chord {
-  readonly id: string;
-  /** Roman numeral label in key context: 'I', 'ii', 'V7', 'viio', 'bII', 'V/V', etc. */
-  readonly romanNumeral: string;
-  readonly startBeat: number;
-  readonly durationBeats: number;
-  /** Actual root pitch in the current key context. */
-  readonly root: SpelledPitch;
+export interface HarmonicDeclaration {
+  readonly measureIndex: number;
+  readonly root: PitchClass;
   readonly quality: ChordQuality;
-  /** 0 = root position, 1 = first inversion, 2 = second, 3 = third (seventh chords). */
-  readonly inversion: 0 | 1 | 2 | 3;
 }
 
-// ── Note ──────────────────────────────────────────────────────────────────────
+// ── Note (実現層) ─────────────────────────────────────────────────────────────
+
+export type NoteRole = 'root' | 'third' | 'fifth' | 'seventh' | 'ninth';
 
 export interface Note {
   readonly id: string;
-  /** MIDI note number (0–127). Canonical for audio/rendering. */
-  readonly pitch: number;
-  /** Enharmonically unambiguous spelling, computed from key context on creation. */
-  readonly spelledPitch?: SpelledPitch;
-  /**
-   * Pitch before a modal transformation — preserved so the transform is
-   * reversible (originalMidi → pitch → originalMidi on inverse transform).
-   */
-  readonly originalMidi?: number;
+  /** Canonical form. MIDI pitch is derived via spelledPitchToMidi() in harmony.ts. */
+  readonly spelledPitch: SpelledPitch;
   readonly startBeat: number;
-  readonly durationBeats: number;
-  readonly velocity: number;    // 0–127
-  readonly partId?: string;     // optional part membership
-  /** Author's intent. Absent = legacy note; key-transform follows ADR-002 heuristics. */
-  readonly binding?: NoteBinding;
+  readonly duration: NoteDuration;
 }
 
-// ── Composition ──────────────────────────────────────────────────────────────
+// ── Voice ─────────────────────────────────────────────────────────────────────
+
+export type VoiceRole = 'soprano' | 'alto' | 'tenor' | 'bass';
+
+/** Low → high register order. */
+export const VOICE_ORDER: readonly VoiceRole[] = ['bass', 'tenor', 'alto', 'soprano'];
+
+export const VOICE_COLORS: Record<VoiceRole, string> = {
+  soprano: '#60a5fa',
+  alto:    '#34d399',
+  tenor:   '#fbbf24',
+  bass:    '#f87171',
+};
+
+export interface Voice {
+  readonly id: string;
+  readonly role: VoiceRole;
+  readonly notes: readonly Note[];
+}
+
+// ── Composition ───────────────────────────────────────────────────────────────
 
 export interface Composition {
   readonly id: string;
-  readonly version: '2.0';
+  readonly keySignature: KeySignature;
+  readonly timeSignature: { readonly numerator: number; readonly denominator: number };
   readonly bpm: number;
-  readonly beatsPerMeasure: number;
-  readonly totalBeats: number;
-  readonly notes: readonly Note[];
-  readonly parts: readonly Part[];
-  /** Global key signature (applies from beat 0 unless overridden by modulations). */
-  readonly globalKey: KeySignature;
-  /** Ordered list of key changes. Each entry overrides globalKey from its beat onward. */
-  readonly modulations?: readonly Modulation[];
-  /**
-   * Declared chords, sorted by startBeat. Created via Roman numeral input (F03).
-   * Notes belonging to a chord carry a `chord_tone` NoteBinding referencing chord.id.
-   */
-  readonly chords?: readonly Chord[];
+  readonly measureCount: number;
+  /** Fixed SATB voices. Always 4 voices in MVP. */
+  readonly voices: readonly Voice[];
+  /** Harmonic declarations — one per measure. */
+  readonly measures: readonly HarmonicDeclaration[];
 }
+
+/** Total beats derived from measure count and time signature. */
+export const totalBeats = (c: Composition): number =>
+  c.measureCount * c.timeSignature.numerator;
+
+/** Beats per measure derived from time signature. */
+export const beatsPerMeasure = (c: Composition): number =>
+  c.timeSignature.numerator;
 
 export const DEFAULT_COMPOSITION: Composition = {
   id: genId(),
-  version: '2.0',
+  keySignature: { tonic: { letter: 'C', accidental: 0 }, mode: 'major' },
+  timeSignature: { numerator: 4, denominator: 4 },
   bpm: 120,
-  beatsPerMeasure: 4,
-  totalBeats: 32,
-  notes: [],
-  parts: [],
-  globalKey: { root: 'C', mode: 'major' },
+  measureCount: 8,
+  voices: [...VOICE_ORDER].reverse().map(role => ({ id: genId(), role, notes: [] })),
+  measures: [],
 };

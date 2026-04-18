@@ -7,11 +7,13 @@ export type NoteDiff = {
 };
 
 export const diffCompositions = (current: Composition, suggested: Composition): NoteDiff => {
-  const currentIds = new Set(current.notes.map(n => n.id));
-  const suggestedIds = new Set(suggested.notes.map(n => n.id));
+  const currentNotes = current.voices.flatMap(v => v.notes);
+  const suggestedNotes = suggested.voices.flatMap(v => v.notes);
+  const currentIds = new Set(currentNotes.map(n => n.id));
+  const suggestedIds = new Set(suggestedNotes.map(n => n.id));
   return {
-    added: suggested.notes.filter(n => !currentIds.has(n.id)),
-    removed: current.notes.filter(n => !suggestedIds.has(n.id)),
-    unchanged: current.notes.filter(n => suggestedIds.has(n.id)),
+    added: suggestedNotes.filter(n => !currentIds.has(n.id)),
+    removed: currentNotes.filter(n => !suggestedIds.has(n.id)),
+    unchanged: currentNotes.filter(n => suggestedIds.has(n.id)),
   };
 };

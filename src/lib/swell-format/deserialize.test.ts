@@ -1,58 +1,49 @@
 import { parseSwell } from './deserialize';
 
+const C_MAJOR_KEY = { tonic: { letter: 'C', accidental: 0 }, mode: 'major' };
+
 const VALID_COMPOSITION = JSON.stringify({
   id: 'test-id',
-  version: '2.0',
   bpm: 120,
-  beatsPerMeasure: 4,
-  totalBeats: 32,
-  notes: [],
-  parts: [],
-  globalKey: { root: 'C', mode: 'major' },
+  measureCount: 8,
+  keySignature: C_MAJOR_KEY,
+  timeSignature: { numerator: 4, denominator: 4 },
+  voices: [],
+  measures: [],
 });
 
 describe('parseSwell', () => {
   it('parses a valid minimal composition', () => {
     const comp = parseSwell(VALID_COMPOSITION);
-    expect(comp.version).toBe('2.0');
     expect(comp.bpm).toBe(120);
-    expect(comp.notes).toEqual([]);
-    expect(comp.parts).toEqual([]);
-  });
-
-  it('throws on unsupported version', () => {
-    const bad = JSON.stringify({ version: '1.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [] });
-    expect(() => parseSwell(bad)).toThrow('Unsupported version');
+    expect(comp.measureCount).toBe(8);
+    expect(comp.voices).toEqual([]);
+    expect(comp.keySignature).toEqual(C_MAJOR_KEY);
   });
 
   it('throws when bpm is missing', () => {
-    const bad = JSON.stringify({ version: '2.0', beatsPerMeasure: 4, totalBeats: 32, notes: [] });
+    const bad = JSON.stringify({ measureCount: 8, keySignature: C_MAJOR_KEY, voices: [], measures: [] });
     expect(() => parseSwell(bad)).toThrow('Invalid composition format');
   });
 
-  it('throws when notes is not an array', () => {
-    const bad = JSON.stringify({ version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: null });
-    expect(() => parseSwell(bad)).toThrow('Invalid notes');
+  it('throws when measureCount is missing', () => {
+    const bad = JSON.stringify({ bpm: 120, keySignature: C_MAJOR_KEY, voices: [], measures: [] });
+    expect(() => parseSwell(bad)).toThrow('Invalid composition format');
   });
 
-  it('defaults missing parts to empty array', () => {
-    const noParts = JSON.stringify({ id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], globalKey: { root: 'C', mode: 'major' } });
-    const comp = parseSwell(noParts);
-    expect(comp.parts).toEqual([]);
+  it('throws when voices is not an array', () => {
+    const bad = JSON.stringify({ bpm: 120, measureCount: 8, keySignature: C_MAJOR_KEY, voices: null, measures: [] });
+    expect(() => parseSwell(bad)).toThrow('Invalid voices');
   });
 
-  it('preserves globalKey', () => {
-    const withKey = JSON.stringify({
-      id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], parts: [],
-      globalKey: { root: 'G', mode: 'major' },
-    });
-    const comp = parseSwell(withKey);
-    expect(comp.globalKey).toEqual({ root: 'G', mode: 'major' });
+  it('throws when keySignature is absent', () => {
+    const bad = JSON.stringify({ bpm: 120, measureCount: 8, voices: [], measures: [] });
+    expect(() => parseSwell(bad)).toThrow('Missing keySignature');
   });
 
-  it('throws when globalKey is absent', () => {
-    const noKey = JSON.stringify({ id: 'x', version: '2.0', bpm: 120, beatsPerMeasure: 4, totalBeats: 32, notes: [], parts: [] });
-    expect(() => parseSwell(noKey)).toThrow('Missing globalKey');
+  it('throws when keySignature.tonic is missing', () => {
+    const bad = JSON.stringify({ bpm: 120, measureCount: 8, keySignature: { mode: 'major' }, voices: [], measures: [] });
+    expect(() => parseSwell(bad)).toThrow('Missing keySignature');
   });
 
   it('throws on invalid JSON', () => {

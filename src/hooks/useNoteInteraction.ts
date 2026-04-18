@@ -2,19 +2,15 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { RefObject } from 'react';
-import type { Composition } from '../types/song';
+import type { Composition, NoteDuration } from '../types/song';
+import { DURATION_BEATS, totalBeats } from '../types/song';
 import type { SuggestionState, DragState } from '../types/ui-state';
 import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
 import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
 import type { SnapDiv } from '../lib/snap';
-import {
-  addChord,
-  removeNote,
-  moveNote,
-  spreadChordAcrossParts,
-} from '../lib/music/note-operations';
-import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic } from '../lib/harmony';
+import { addNote, addChordToVoice, removeNote, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
+import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi, spelledPitchToMidi } from '../lib/harmony';
 import { yToPitch } from '../components/piano-roll/layout';
 
 export interface UseNoteInteractionReturn {
@@ -29,11 +25,19 @@ export interface UseNoteInteractionOptions {
   triplet: boolean;
   cellW: number;
   chordType: ChordType;
-  activePartId: string | null;
+  activeVoiceId: string | null;
   spreadChord: boolean;
   setComposition: React.Dispatch<React.SetStateAction<Composition>>;
   gridRef: RefObject<HTMLDivElement | null>;
 }
+
+// Snap resolution → NoteDuration (approximate)
+const resolutionToDuration = (resolution: number): NoteDuration => {
+  if (resolution >= 4) return 'whole';
+  if (resolution >= 2) return 'half';
+  if (resolution >= 1) return 'quarter';
+  return 'eighth';
+};
 
 export const useNoteInteraction = ({
   composition,
@@ -42,7 +46,7 @@ export const useNoteInteraction = ({
   triplet,
   cellW,
   chordType,
-  activePartId,
+  activeVoiceId,
   spreadChord,
   setComposition,
   gridRef,
@@ -61,7 +65,6 @@ export const useNoteInteraction = ({
   const resolutionRef = useRef(toResolution(snapDiv, triplet));
   resolutionRef.current = toResolution(snapDiv, triplet);
 
-  // Window-level move/up handlers so drag works even outside the grid
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       const d = dragRef.current;
@@ -69,20 +72,21 @@ export const useNoteInteraction = ({
       const rect = gridRef.current?.getBoundingClientRect();
       if (!rect) return;
       const rawBeat = (e.clientX - rect.left) / cellWRef.current;
-      const pitch = yToPitch(e.clientY - rect.top);
-      if (pitch === null) return;
+      const midi = yToPitch(e.clientY - rect.top);
+      if (midi === null) return;
       const s = compositionRef.current;
       const res = resolutionRef.current;
-      const newBeat = Math.max(0, Math.min(s.totalBeats - 1, snapBeat(rawBeat - d.beatOffset, res)));
-      const hasMoved = newBeat !== d.originalBeat || pitch !== d.originalPitch;
-      setDrag({ ...d, previewBeat: newBeat, previewPitch: pitch, hasMoved });
+      const newBeat = Math.max(0, Math.min(totalBeats(s) - 1, snapBeat(rawBeat - d.beatOffset, res)));
+      const key = keyAtBeat(s, newBeat);
+      const hasMoved = newBeat !== d.originalBeat || midi !== d.originalMidi;
+      setDrag({ ...d, previewBeat: newBeat, previewSpelledPitch: spellMidi(midi, key), hasMoved });
     };
 
     const handleMouseUp = () => {
       const d = dragRef.current;
       if (!d) return;
       if (d.hasMoved) {
-        setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewPitch));
+        setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
       } else {
         setComposition(s => removeNote(s, d.noteId));
       }
@@ -103,50 +107,60 @@ export const useNoteInteraction = ({
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const rawBeat = (e.clientX - rect.left) / cellW;
-      const pitch = yToPitch(e.clientY - rect.top);
+      const midi = yToPitch(e.clientY - rect.top);
       const resolution = toResolution(snapDiv, triplet);
-      if (pitch === null || rawBeat < 0 || rawBeat >= composition.totalBeats) return;
+      if (midi === null || rawBeat < 0 || rawBeat >= totalBeats(composition)) return;
 
-      // Hit-test uses raw position for accuracy
-      const hit = composition.notes.find(
-        n => n.pitch === pitch && rawBeat >= n.startBeat && rawBeat < n.startBeat + n.durationBeats,
+      // Hit-test: find a note at this position across all voices
+      const allNotes = composition.voices.flatMap(v =>
+        v.notes.map(n => ({ note: n, voiceId: v.id }))
       );
+      const hit = allNotes.find(({ note: n }) => {
+        const noteMidi = spelledPitchToMidi(n.spelledPitch);
+        return noteMidi === midi &&
+          rawBeat >= n.startBeat &&
+          rawBeat < n.startBeat + DURATION_BEATS[n.duration];
+      });
 
       if (hit) {
+        const { note } = hit;
         setDrag({
-          noteId: hit.id,
-          originalBeat: hit.startBeat,
-          originalPitch: hit.pitch,
-          beatOffset: rawBeat - hit.startBeat,
-          previewBeat: hit.startBeat,
-          previewPitch: hit.pitch,
+          noteId: note.id,
+          originalBeat: note.startBeat,
+          originalMidi: spelledPitchToMidi(note.spelledPitch),
+          beatOffset: rawBeat - note.startBeat,
+          previewBeat: note.startBeat,
+          previewSpelledPitch: note.spelledPitch,
           hasMoved: false,
         });
       } else {
-        const snapped = Math.max(0, Math.min(composition.totalBeats - resolution, snapBeatFloor(rawBeat, resolution)));
+        const snapped = Math.max(0, Math.min(totalBeats(composition) - resolution, snapBeatFloor(rawBeat, resolution)));
+        const duration = resolutionToDuration(resolution);
+        const key = keyAtBeat(composition, snapped);
 
-        // Resolve chord intervals: diatonic types depend on the active key.
         const isDia = chordType === 'dia' || chordType === 'dia7';
         let intervals: readonly number[];
-        let rootPitch = pitch; // may be snapped for diatonic mode
+        let rootMidi = midi;
         if (isDia) {
-          const key = keyAtBeat(composition, snapped);
-          // Snap chromatic pitches to the nearest diatonic note so Dia mode
-          // always produces a chord even when the user clicks a black key.
-          rootPitch = snapToDiatonic(pitch, key);
-          intervals = getDiatonicChordIntervals(rootPitch, key, chordType === 'dia7') ?? [0];
+          rootMidi = snapToDiatonic(midi, key);
+          intervals = getDiatonicChordIntervals(rootMidi, key, chordType === 'dia7') ?? [0];
         } else {
-          intervals = CHORD_INTERVALS[chordType];
+          intervals = CHORD_INTERVALS[chordType] ?? [0];
         }
 
-        if (spreadChord && intervals.length > 1 && composition.parts.length >= 2) {
-          setComposition(s => spreadChordAcrossParts(s, rootPitch, snapped, resolution, intervals));
+        const voiceId = activeVoiceId ?? composition.voices[0]?.id;
+        if (!voiceId) return;
+
+        if (spreadChord && intervals.length > 1) {
+          setComposition(s => spreadChordAcrossVoices(s, rootMidi, snapped, duration, intervals, key));
+        } else if (intervals.length > 1) {
+          setComposition(s => addChordToVoice(s, voiceId, rootMidi, snapped, duration, intervals, key));
         } else {
-          setComposition(s => addChord(s, rootPitch, snapped, resolution, intervals, activePartId ?? undefined));
+          setComposition(s => addNote(s, voiceId, spellMidi(rootMidi, key), snapped, duration));
         }
       }
     },
-    [composition, suggestionStatus, snapDiv, triplet, cellW, chordType, activePartId, spreadChord, setComposition],
+    [composition, suggestionStatus, snapDiv, triplet, cellW, chordType, activeVoiceId, spreadChord, setComposition],
   );
 
   return { drag, handleGridMouseDown };

@@ -11,6 +11,7 @@ import { useZoom } from '../../hooks/useZoom';
 import { toResolution } from '../../lib/snap';
 import type { SnapDiv } from '../../lib/snap';
 import type { ChordType } from '../../lib/music/chord';
+import { totalBeats, beatsPerMeasure } from '../../types/song';
 import { NUM_WHITE_KEYS, WHITE_H } from './layout';
 import TransportBar from '../transport/TransportBar';
 import TracksBar from '../streams/TracksBar';
@@ -24,14 +25,16 @@ import NoteLayer from './NoteLayer';
 import Playhead from './Playhead';
 
 export default function PianoRoll() {
-  const comp = useComposition();
-  const { composition, setComposition, globalKey, setGlobalKey, activePartId, setActivePartId, spreadChord, setSpreadChord,
-    handleAddPart, handleRemovePart, handleRenamePart, handleApplySATB,
-    handleExport, handleImport, handleBpmChange } = comp;
+  const {
+    composition, setComposition,
+    activeVoiceId, setActiveVoiceId,
+    handleExport, handleImport, handleBpmChange, handleKeyChange,
+  } = useComposition();
 
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
   const [triplet, setTriplet] = useState(false);
   const [chordType, setChordType] = useState<ChordType>('note');
+  const [spreadChord, setSpreadChord] = useState(false);
   const [problemsOpen, setProblemsOpen] = useState(false);
 
   const { suggestion, handleAgentSubmit, handleAccept, handleReject } = useAgentSuggestion(composition, setComposition);
@@ -46,10 +49,9 @@ export default function PianoRoll() {
   const keyboardRef = useRef<HTMLDivElement>(null);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (keyboardRef.current) {
-      keyboardRef.current.scrollTop = e.currentTarget.scrollTop;
-    }
+    if (keyboardRef.current) keyboardRef.current.scrollTop = e.currentTarget.scrollTop;
   };
+
   const { drag, handleGridMouseDown } = useNoteInteraction({
     composition,
     suggestionStatus: suggestion.status,
@@ -57,14 +59,16 @@ export default function PianoRoll() {
     triplet,
     cellW,
     chordType,
-    activePartId,
+    activeVoiceId,
     spreadChord,
     setComposition,
     gridRef,
   });
 
   const resolution = toResolution(snapDiv, triplet);
-  const gridWidth = composition.totalBeats * cellW;
+  const tb = totalBeats(composition);
+  const bpm = beatsPerMeasure(composition);
+  const gridWidth = tb * cellW;
   const gridHeight = NUM_WHITE_KEYS * WHITE_H;
 
   return (
@@ -89,38 +93,25 @@ export default function PianoRoll() {
         canZoomOut={canZoomOut}
         chordType={chordType}
         onChordTypeChange={setChordType}
-        globalKey={globalKey}
-        onGlobalKeyChange={setGlobalKey}
+        globalKey={composition.keySignature}
+        onGlobalKeyChange={handleKeyChange}
       />
       <TracksBar
-        parts={composition.parts}
-        activePartId={activePartId}
-        onActivePartChange={setActivePartId}
-        onAddPart={handleAddPart}
-        onRemovePart={handleRemovePart}
-        onRenamePart={handleRenamePart}
-        onApplySATB={handleApplySATB}
+        voices={composition.voices}
+        activeVoiceId={activeVoiceId}
+        onActiveVoiceChange={setActiveVoiceId}
         spreadChord={spreadChord}
         onSpreadChordToggle={() => setSpreadChord(v => !v)}
       />
       {musicGen.status !== 'hidden' && (
-        <MusicGenBar
-          state={musicGen}
-          onGenerate={handleMusicGen}
-          onClose={closeMusicGen}
-        />
+        <MusicGenBar state={musicGen} onGenerate={handleMusicGen} onClose={closeMusicGen} />
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <Keyboard globalKey={globalKey} scrollRef={keyboardRef} />
+        <Keyboard globalKey={composition.keySignature} scrollRef={keyboardRef} />
 
-        {/* Scrollable grid */}
         <div className="flex-1 overflow-auto overscroll-none" onScroll={handleScroll}>
-          <BeatHeader
-            totalBeats={composition.totalBeats}
-            beatsPerMeasure={composition.beatsPerMeasure}
-            cellW={cellW}
-          />
+          <BeatHeader totalBeats={tb} beatsPerMeasure={bpm} cellW={cellW} />
 
           <div
             ref={gridRef}
@@ -132,11 +123,11 @@ export default function PianoRoll() {
             onMouseDown={handleGridMouseDown}
           >
             <Grid
-              totalBeats={composition.totalBeats}
-              beatsPerMeasure={composition.beatsPerMeasure}
+              totalBeats={tb}
+              beatsPerMeasure={bpm}
               cellW={cellW}
               resolution={resolution}
-              globalKey={globalKey}
+              globalKey={composition.keySignature}
             />
             <NoteLayer
               composition={composition}

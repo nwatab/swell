@@ -127,7 +127,7 @@ export default function TransportBar({
         onTripletToggle={onTripletToggle}
       />
       <ChordSelector chordType={chordType} onChordTypeChange={onChordTypeChange} />
-      <KeySelector globalKey={globalKey} onGlobalKeyChange={onGlobalKeyChange} />
+      <KeySelector keySignature={globalKey} onKeyChange={onGlobalKeyChange} />
       <ZoomControls
         onZoomIn={onZoomIn}
         onZoomOut={onZoomOut}

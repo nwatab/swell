@@ -1,7 +1,5 @@
-import { PITCH_CLASS_NAMES } from '../../types/song';
-
 // ── Piano constants ───────────────────────────────────────────────────────────
-export const NOTE_NAMES = PITCH_CLASS_NAMES;
+export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 export const BLACK_SEMITONES = new Set([1, 3, 6, 8, 10]);
 
 export const isBlack = (pitch: number): boolean => BLACK_SEMITONES.has(pitch % 12);
