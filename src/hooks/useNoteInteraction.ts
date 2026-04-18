@@ -9,7 +9,7 @@ import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
 import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
 import type { SnapDiv } from '../lib/snap';
-import { addNote, addChordToVoice, removeNote, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
+import { addNote, removeNote, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
 import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi, spelledPitchToMidi } from '../lib/harmony';
 import { yToPitch } from '../components/piano-roll/layout';
 
@@ -26,7 +26,6 @@ export interface UseNoteInteractionOptions {
   cellW: number;
   chordType: ChordType;
   activeVoiceId: string | null;
-  spreadChord: boolean;
   setComposition: React.Dispatch<React.SetStateAction<Composition>>;
   gridRef: RefObject<HTMLDivElement | null>;
 }
@@ -47,7 +46,6 @@ export const useNoteInteraction = ({
   cellW,
   chordType,
   activeVoiceId,
-  spreadChord,
   setComposition,
   gridRef,
 }: UseNoteInteractionOptions): UseNoteInteractionReturn => {
@@ -151,16 +149,14 @@ export const useNoteInteraction = ({
         const voiceId = activeVoiceId ?? composition.voices[0]?.id;
         if (!voiceId) return;
 
-        if (spreadChord && intervals.length > 1) {
+        if (intervals.length > 1) {
           setComposition(s => spreadChordAcrossVoices(s, rootMidi, snapped, duration, intervals, key));
-        } else if (intervals.length > 1) {
-          setComposition(s => addChordToVoice(s, voiceId, rootMidi, snapped, duration, intervals, key));
         } else {
           setComposition(s => addNote(s, voiceId, spellMidi(rootMidi, key), snapped, duration));
         }
       }
     },
-    [composition, suggestionStatus, snapDiv, triplet, cellW, chordType, activeVoiceId, spreadChord, setComposition],
+    [composition, suggestionStatus, snapDiv, triplet, cellW, chordType, activeVoiceId, setComposition],
   );
 
   return { drag, handleGridMouseDown };

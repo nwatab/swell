@@ -34,7 +34,6 @@ export default function PianoRoll() {
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
   const [triplet, setTriplet] = useState(false);
   const [chordType, setChordType] = useState<ChordType>('note');
-  const [spreadChord, setSpreadChord] = useState(false);
   const [problemsOpen, setProblemsOpen] = useState(false);
 
   const { suggestion, handleAgentSubmit, handleAccept, handleReject } = useAgentSuggestion(composition, setComposition);
@@ -60,7 +59,6 @@ export default function PianoRoll() {
     cellW,
     chordType,
     activeVoiceId,
-    spreadChord,
     setComposition,
     gridRef,
   });
@@ -100,8 +98,6 @@ export default function PianoRoll() {
         voices={composition.voices}
         activeVoiceId={activeVoiceId}
         onActiveVoiceChange={setActiveVoiceId}
-        spreadChord={spreadChord}
-        onSpreadChordToggle={() => setSpreadChord(v => !v)}
       />
       {musicGen.status !== 'hidden' && (
         <MusicGenBar state={musicGen} onGenerate={handleMusicGen} onClose={closeMusicGen} />

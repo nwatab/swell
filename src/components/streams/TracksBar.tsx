@@ -7,16 +7,12 @@ interface VoicesBarProps {
   voices: readonly Voice[];
   activeVoiceId: string | null;
   onActiveVoiceChange: (id: string) => void;
-  spreadChord: boolean;
-  onSpreadChordToggle: () => void;
 }
 
 export default function TracksBar({
   voices,
   activeVoiceId,
   onActiveVoiceChange,
-  spreadChord,
-  onSpreadChordToggle,
 }: VoicesBarProps) {
   return (
     <div className="flex items-center gap-2 px-4 bg-zinc-900 border-b border-zinc-700 h-10 flex-shrink-0 overflow-x-auto">
@@ -40,18 +36,6 @@ export default function TracksBar({
         );
       })}
 
-      <button
-        onClick={onSpreadChordToggle}
-        className={[
-          'px-2 py-1 rounded text-xs transition-colors flex-shrink-0 font-mono',
-          spreadChord
-            ? 'bg-teal-700 text-teal-100'
-            : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-400',
-        ].join(' ')}
-        title="Spread chord across all voices (bass → soprano)"
-      >
-        Spread
-      </button>
     </div>
   );
 }
