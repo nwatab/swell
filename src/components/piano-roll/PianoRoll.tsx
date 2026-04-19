@@ -32,7 +32,6 @@ export default function PianoRoll() {
   } = useComposition();
 
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
-  const [triplet, setTriplet] = useState(false);
   const [chordType, setChordType] = useState<ChordType>('note');
   const [problemsOpen, setProblemsOpen] = useState(false);
 
@@ -55,7 +54,6 @@ export default function PianoRoll() {
     composition,
     suggestionStatus: suggestion.status,
     snapDiv,
-    triplet,
     cellW,
     chordType,
     activeVoiceId,
@@ -63,7 +61,7 @@ export default function PianoRoll() {
     gridRef,
   });
 
-  const resolution = toResolution(snapDiv, triplet);
+  const resolution = toResolution(snapDiv);
   const tb = totalBeats(composition);
   const bpm = beatsPerMeasure(composition);
   const gridWidth = tb * cellW;
@@ -82,9 +80,7 @@ export default function PianoRoll() {
         onExport={handleExport}
         onImport={handleImport}
         snapDiv={snapDiv}
-        triplet={triplet}
         onSnapDivChange={setSnapDiv}
-        onTripletToggle={() => setTriplet(t => !t)}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         canZoomIn={canZoomIn}

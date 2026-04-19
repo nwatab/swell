@@ -22,7 +22,6 @@ export interface UseNoteInteractionOptions {
   composition: Composition;
   suggestionStatus: SuggestionState['status'];
   snapDiv: SnapDiv;
-  triplet: boolean;
   cellW: number;
   chordType: ChordType;
   activeVoiceId: string | null;
@@ -42,7 +41,6 @@ export const useNoteInteraction = ({
   composition,
   suggestionStatus,
   snapDiv,
-  triplet,
   cellW,
   chordType,
   activeVoiceId,
@@ -60,8 +58,8 @@ export const useNoteInteraction = ({
   const cellWRef = useRef(cellW);
   cellWRef.current = cellW;
 
-  const resolutionRef = useRef(toResolution(snapDiv, triplet));
-  resolutionRef.current = toResolution(snapDiv, triplet);
+  const resolutionRef = useRef(toResolution(snapDiv));
+  resolutionRef.current = toResolution(snapDiv);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -106,7 +104,7 @@ export const useNoteInteraction = ({
       const rect = e.currentTarget.getBoundingClientRect();
       const rawBeat = (e.clientX - rect.left) / cellW;
       const midi = yToPitch(e.clientY - rect.top);
-      const resolution = toResolution(snapDiv, triplet);
+      const resolution = toResolution(snapDiv);
       if (midi === null || rawBeat < 0 || rawBeat >= totalBeats(composition)) return;
 
       // Hit-test: find a note at this position across all voices
@@ -156,7 +154,7 @@ export const useNoteInteraction = ({
         }
       }
     },
-    [composition, suggestionStatus, snapDiv, triplet, cellW, chordType, activeVoiceId, setComposition],
+    [composition, suggestionStatus, snapDiv, cellW, chordType, activeVoiceId, setComposition],
   );
 
   return { drag, handleGridMouseDown };

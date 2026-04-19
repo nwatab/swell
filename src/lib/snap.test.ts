@@ -1,12 +1,9 @@
 import { toResolution, snapBeat, snapBeatFloor } from './snap';
 
 describe('toResolution', () => {
-  it('returns 1 for 1/4 straight', () => expect(toResolution('1/4', false)).toBe(1));
-  it('returns 0.5 for 1/8 straight', () => expect(toResolution('1/8', false)).toBe(0.5));
-  it('returns 0.25 for 1/16 straight', () => expect(toResolution('1/16', false)).toBe(0.25));
-  it('returns 2/3 for 1/4 triplet', () => expect(toResolution('1/4', true)).toBeCloseTo(2 / 3));
-  it('returns 1/3 for 1/8 triplet', () => expect(toResolution('1/8', true)).toBeCloseTo(1 / 3));
-  it('returns 1/6 for 1/16 triplet', () => expect(toResolution('1/16', true)).toBeCloseTo(1 / 6));
+  it('returns 1 for 1/4', () => expect(toResolution('1/4')).toBe(1));
+  it('returns 0.5 for 1/8', () => expect(toResolution('1/8')).toBe(0.5));
+  it('returns 0.25 for 1/16', () => expect(toResolution('1/16')).toBe(0.25));
 });
 
 describe('snapBeat (nearest — used during drag)', () => {

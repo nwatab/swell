@@ -21,9 +21,7 @@ interface TransportBarProps {
   onExport: () => void;
   onImport: (composition: Composition) => void;
   snapDiv: SnapDiv;
-  triplet: boolean;
   onSnapDivChange: (div: SnapDiv) => void;
-  onTripletToggle: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   canZoomIn: boolean;
@@ -45,9 +43,7 @@ export default function TransportBar({
   onExport,
   onImport,
   snapDiv,
-  triplet,
   onSnapDivChange,
-  onTripletToggle,
   onZoomIn,
   onZoomOut,
   canZoomIn,
@@ -120,12 +116,7 @@ export default function TransportBar({
           onChange={handleFileChange}
         />
       </div>
-      <SnapSelector
-        snapDiv={snapDiv}
-        triplet={triplet}
-        onSnapDivChange={onSnapDivChange}
-        onTripletToggle={onTripletToggle}
-      />
+      <SnapSelector snapDiv={snapDiv} onSnapDivChange={onSnapDivChange} />
       <ChordSelector chordType={chordType} onChordTypeChange={onChordTypeChange} />
       <KeySelector keySignature={globalKey} onKeyChange={onGlobalKeyChange} />
       <ZoomControls
