@@ -107,7 +107,7 @@ export default function PianoRoll() {
         <Keyboard globalKey={composition.keySignature} scrollRef={keyboardRef} />
 
         <div className="flex-1 overflow-auto overscroll-none" onScroll={handleScroll}>
-          <BeatHeader totalBeats={tb} beatsPerMeasure={bpm} cellW={cellW} />
+          <BeatHeader totalBeats={tb} beatsPerMeasure={bpm} cellW={cellW} measures={composition.measures} />
 
           <div
             ref={gridRef}

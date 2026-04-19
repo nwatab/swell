@@ -14,6 +14,7 @@ import {
   KEY_W,
   NUM_WHITE_KEYS,
   HEADER_H,
+  CHORD_HEADER_H,
 } from './layout';
 
 function WhiteKey({ pitch, idx, globalKey }: { pitch: number; idx: number; globalKey: KeySignature }) {
@@ -53,7 +54,7 @@ export default function Keyboard({ globalKey, scrollRef }: KeyboardProps) {
       className="flex-shrink-0 overflow-hidden border-r border-zinc-700"
       style={{ width: KEY_W }}
     >
-      <div style={{ height: HEADER_H }} className="bg-zinc-800 border-b border-zinc-600" />
+      <div style={{ height: CHORD_HEADER_H + HEADER_H }} className="bg-zinc-800 border-b border-zinc-600" />
       <div className="relative" style={{ height: NUM_WHITE_KEYS * WHITE_H }}>
         {[...WHITE_INDEX.entries()].map(([pitch, idx]) => (
           <WhiteKey key={pitch} pitch={pitch} idx={idx} globalKey={globalKey} />
