@@ -2,6 +2,7 @@ import type { Composition, Voice, Note, PitchClass, SpelledPitch, NoteDuration, 
 import { VOICE_ORDER } from '../../types/song';
 import { spellMidi, spelledPitchToMidi } from '../harmony';
 import { genId } from '../id';
+import { getPrevVoicePitches, resolveVoiceLeading } from './voiceLeadingResolver';
 
 export const MAX_MIDI = 84; // C6
 export const MIN_MIDI = 36; // C2
@@ -22,8 +23,9 @@ export const findNextChordTone = (
 
 /**
  * Distribute chord tones across voices (bass→soprano), one note per voice.
- * rootMidi is the MIDI pitch of the root (used only as scratch for arithmetic).
- * All stored notes use SpelledPitch.
+ * When all four voices have prior notes, uses voice-leading optimisation
+ * (minimum total movement + SATB range penalties) to assign chord tones.
+ * Falls back to sequential ascending assignment otherwise.
  */
 export const spreadChordAcrossVoices = (
   composition: Composition,
@@ -38,17 +40,31 @@ export const spreadChordAcrossVoices = (
     (a, b) => VOICE_ORDER.indexOf(a.role) - VOICE_ORDER.indexOf(b.role),
   );
 
-  const midiPitches: number[] = [rootMidi];
-  for (let i = 1; i < orderedVoices.length; i++) {
-    midiPitches.push(findNextChordTone(midiPitches[i - 1], intervals, rootMidi));
-  }
+  // Attempt voice-leading optimisation when previous positions are available
+  const prevPitches = getPrevVoicePitches(composition, startBeat);
+  const leading = prevPitches !== null
+    ? resolveVoiceLeading(prevPitches, rootMidi, intervals, key)
+    : null;
 
-  const voiceNotes = new Map(
-    orderedVoices.map((v, i) => [
-      v.id,
-      { spelledPitch: spellMidi(midiPitches[i], key), startBeat, duration },
-    ]),
-  );
+  let voiceNotes: Map<string, { spelledPitch: SpelledPitch; startBeat: number; duration: NoteDuration }>;
+
+  if (leading !== null) {
+    voiceNotes = new Map(
+      orderedVoices.map(v => [v.id, { spelledPitch: leading[v.role], startBeat, duration }]),
+    );
+  } else {
+    // Fallback: sequential ascending assignment
+    const midiPitches: number[] = [rootMidi];
+    for (let i = 1; i < orderedVoices.length; i++) {
+      midiPitches.push(findNextChordTone(midiPitches[i - 1], intervals, rootMidi));
+    }
+    voiceNotes = new Map(
+      orderedVoices.map((v, i) => [
+        v.id,
+        { spelledPitch: spellMidi(midiPitches[i], key), startBeat, duration },
+      ]),
+    );
+  }
 
   return {
     ...composition,
@@ -112,6 +128,22 @@ export const removeNote = (composition: Composition, noteId: string): Compositio
     notes: v.notes.filter(n => n.id !== noteId),
   })),
 });
+
+/**
+ * Remove all notes that share the same startBeat as the given note.
+ * Clicking any note in a chord removes the whole chord across all voices.
+ */
+export const removeChord = (composition: Composition, noteId: string): Composition => {
+  const beat = composition.voices.flatMap(v => v.notes).find(n => n.id === noteId)?.startBeat;
+  if (beat === undefined) return composition;
+  return {
+    ...composition,
+    voices: composition.voices.map(v => ({
+      ...v,
+      notes: v.notes.filter(n => n.startBeat !== beat),
+    })),
+  };
+};
 
 /**
  * Transpose all notes and chord declaration roots by the chromatic distance
