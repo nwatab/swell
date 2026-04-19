@@ -95,10 +95,10 @@ export type VoiceRole = 'soprano' | 'alto' | 'tenor' | 'bass';
 export const VOICE_ORDER: readonly VoiceRole[] = ['bass', 'tenor', 'alto', 'soprano'];
 
 export const VOICE_COLORS: Record<VoiceRole, string> = {
-  soprano: '#60a5fa',
-  alto:    '#34d399',
-  tenor:   '#fbbf24',
-  bass:    '#f87171',
+  soprano: '#f87171',
+  alto:    '#fbbf24',
+  tenor:   '#34d399',
+  bass:    '#60a5fa',
 };
 
 export interface Voice {
