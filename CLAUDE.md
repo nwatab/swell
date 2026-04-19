@@ -40,7 +40,7 @@ src/
 │   ├── agent/               # AgentBar, MusicGenBar
 │   └── diagnostics/         # ProblemsPanel
 ├── hooks/                   # 状態管理。lib/の純粋関数とcomponents/の橋渡し
-│   ├── useComposition.ts    # song状態、ノート操作、key変更、stream操作
+│   ├── useComposition.ts    # song状態、BPM/key変更、import/export
 │   ├── usePlayback.ts       # AudioContext、play/stop、playhead
 │   ├── useNoteInteraction.ts # drag、click-to-add/delete
 │   ├── useAgentSuggestion.ts
@@ -49,16 +49,20 @@ src/
 │   └── useDiagnostics.ts
 ├── lib/                     # 純粋関数のみ。React依存禁止。単体テスト対象
 │   ├── music/               # 音楽ドメインロジック
-│   │   ├── chord.ts
-│   │   ├── stream.ts
-│   │   └── note-operations.ts
+│   │   ├── chord.ts         # コードタイプ・インターバル定義
+│   │   ├── note-operations.ts # ノート追加・移動・転調・和音展開
+│   │   ├── voice.ts         # 声部単位のノート操作（add/remove/move/find）
+│   │   └── score-repr.ts    # Composition → LLM可読テキスト変換
 │   ├── swell-format/        # Import/Export
 │   ├── harmony.ts           # 和声分析（既存）
 │   ├── snap.ts
-│   └── diff.ts
+│   ├── diff.ts
+│   ├── audio.ts             # Web Audio API ユーティリティ
+│   └── id.ts                # ID生成
 └── types/
-    ├── song.ts              # (既存)
-    └── ui-state.ts          # SnapDiv, ChordType, SuggestionState, DragState, MusicGenState
+    ├── song.ts              # Composition, Voice, Note, SpelledPitch 等
+    ├── ui-state.ts          # SnapDiv, ChordType, SuggestionState, DragState, MusicGenState
+    └── app-state.ts         # AppState（複数Composition管理）
 ```
 
 ## Internal Data Model
@@ -72,12 +76,7 @@ pitch: number                                  ← 導出値
 
 詳細は `docs/ADR/001-spelled-note-as-canonical-form.md` を参照。
 
-## Current Phase
-
-プロトタイピング → リファクタリング段階。
-PianoRoll.tsxの分割を `docs/REFACTORING-PLAN.md` に従い進行中。
-
 ## Dev Notes
 
-- LLMへの楽譜情報の渡し方は未確定（ADR-005）
+- LLMへの楽譜情報の渡し方は `score-repr.ts` の `compositionToText()` で実装済み
 - MusicGen統合は試行したが conditioning精度に課題あり
