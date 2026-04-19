@@ -1,4 +1,4 @@
-import type { Composition, Voice, Note, PitchClass, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
+import type { Composition, Voice, Note, NoteRole, PitchClass, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
 import { VOICE_ORDER } from '../../types/song';
 import { spellMidi, spelledPitchToMidi } from '../harmony';
 import { genId } from '../id';
@@ -6,6 +6,14 @@ import { getPrevVoicePitches, resolveVoiceLeading } from './voiceLeadingResolver
 
 export const MAX_MIDI = 84; // C6
 export const MIN_MIDI = 36; // C2
+
+const INTERVAL_ROLES: readonly NoteRole[] = ['root', 'third', 'fifth', 'seventh', 'ninth'];
+
+const roleForMidi = (midi: number, rootMidi: number, intervals: readonly number[]): NoteRole => {
+  const semitone = ((midi % 12) - (rootMidi % 12) + 12) % 12;
+  const idx = (intervals as number[]).indexOf(semitone);
+  return INTERVAL_ROLES[idx] ?? 'root';
+};
 
 // Find the nearest chord tone strictly above `aboveMidi`
 export const findNextChordTone = (
@@ -46,6 +54,8 @@ export const spreadChordAcrossVoices = (
     ? resolveVoiceLeading(prevPitches, rootMidi, intervals, key)
     : null;
 
+  const chordId = genId();
+
   let voiceNotes: Map<string, { spelledPitch: SpelledPitch; startBeat: number; duration: NoteDuration }>;
 
   if (leading !== null) {
@@ -71,7 +81,9 @@ export const spreadChordAcrossVoices = (
     voices: composition.voices.map(v => {
       const entry = voiceNotes.get(v.id);
       if (!entry) return v;
-      return { ...v, notes: [...v.notes, { id: genId(), ...entry }] };
+      const midi = spelledPitchToMidi(entry.spelledPitch);
+      const binding = { kind: 'chord_tone' as const, chordId, role: roleForMidi(midi, rootMidi, intervals) };
+      return { ...v, notes: [...v.notes, { id: genId(), ...entry, binding }] };
     }),
   };
 };
@@ -129,21 +141,14 @@ export const removeNote = (composition: Composition, noteId: string): Compositio
   })),
 });
 
-/**
- * Remove all notes that share the same startBeat as the given note.
- * Clicking any note in a chord removes the whole chord across all voices.
- */
-export const removeChord = (composition: Composition, noteId: string): Composition => {
-  const beat = composition.voices.flatMap(v => v.notes).find(n => n.id === noteId)?.startBeat;
-  if (beat === undefined) return composition;
-  return {
-    ...composition,
-    voices: composition.voices.map(v => ({
-      ...v,
-      notes: v.notes.filter(n => n.startBeat !== beat),
-    })),
-  };
-};
+/** Remove all notes belonging to a chord group (identified by chordId in their binding). */
+export const removeChord = (composition: Composition, chordId: string): Composition => ({
+  ...composition,
+  voices: composition.voices.map(v => ({
+    ...v,
+    notes: v.notes.filter(n => !(n.binding?.kind === 'chord_tone' && n.binding.chordId === chordId)),
+  })),
+});
 
 /**
  * Transpose all notes and chord declaration roots by the chromatic distance

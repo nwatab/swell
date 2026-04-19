@@ -79,12 +79,18 @@ export interface HarmonicDeclaration {
 
 export type NoteRole = 'root' | 'third' | 'fifth' | 'seventh' | 'ninth';
 
+export type NoteBinding =
+  | { readonly kind: 'absolute' }
+  | { readonly kind: 'chord_tone'; readonly chordId: string; readonly role: NoteRole }
+  | { readonly kind: 'scale_degree'; readonly degree: 1|2|3|4|5|6|7 };
+
 export interface Note {
   readonly id: string;
   /** Canonical form. MIDI pitch is derived via spelledPitchToMidi() in harmony.ts. */
   readonly spelledPitch: SpelledPitch;
   readonly startBeat: number;
   readonly duration: NoteDuration;
+  readonly binding?: NoteBinding;
 }
 
 // ── Voice ─────────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import type { RefObject } from 'react';
 import type { Composition, NoteDuration } from '../types/song';
 import { DURATION_BEATS, totalBeats } from '../types/song';
@@ -9,7 +9,7 @@ import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
 import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
 import type { SnapDiv } from '../lib/snap';
-import { addNote, removeNote, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
+import { addNote, removeNote, removeChord, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
 import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi, spelledPitchToMidi } from '../lib/harmony';
 import { yToPitch } from '../components/piano-roll/layout';
 
@@ -50,16 +50,16 @@ export const useNoteInteraction = ({
   const [drag, setDrag] = useState<DragState | null>(null);
 
   const dragRef = useRef<DragState | null>(null);
-  dragRef.current = drag;
-
   const compositionRef = useRef<Composition>(composition);
-  compositionRef.current = composition;
-
   const cellWRef = useRef(cellW);
-  cellWRef.current = cellW;
-
   const resolutionRef = useRef(toResolution(snapDiv));
-  resolutionRef.current = toResolution(snapDiv);
+
+  useLayoutEffect(() => {
+    dragRef.current = drag;
+    compositionRef.current = composition;
+    cellWRef.current = cellW;
+    resolutionRef.current = toResolution(snapDiv);
+  });
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -84,7 +84,13 @@ export const useNoteInteraction = ({
       if (d.hasMoved) {
         setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
       } else {
-        setComposition(s => removeNote(s, d.noteId));
+        const note = compositionRef.current.voices.flatMap(v => v.notes).find(n => n.id === d.noteId);
+        const binding = note?.binding;
+        if (binding?.kind === 'chord_tone') {
+          setComposition(s => removeChord(s, binding.chordId));
+        } else {
+          setComposition(s => removeNote(s, d.noteId));
+        }
       }
       setDrag(null);
     };
@@ -95,7 +101,7 @@ export const useNoteInteraction = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []); // stable — reads latest state via refs
+  }, [gridRef, setComposition]); // stable refs — gridRef.current and setState setter never change
 
   const handleGridMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
