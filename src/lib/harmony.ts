@@ -394,9 +394,8 @@ const pitchLabel = (midi: number, key: KeySignature): string =>
 export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
   const diags: Diagnostic[] = [];
 
-  // ── Voice-based analysis (needs at least 2 voices with notes) ────────────
   const activeVoices = song.voices.filter(v => v.notes.length > 0);
-  if (activeVoices.length < 2) return diags;
+  if (activeVoices.length < 1) return diags;
 
   // SATB order: bass(0) → tenor(1) → alto(2) → soprano(3)
   const ROLE_ORDER: VoiceRole[] = ['bass', 'tenor', 'alto', 'soprano'];
@@ -488,78 +487,132 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
     }
   }
 
-  // ── 4. Parallel 5ths and octaves ──────────────────────────────────────────
-  for (let i = 1; i < snapshots.length; i++) {
-    const prev = snapshots[i - 1];
-    const curr = snapshots[i];
-    const common = orderedVoiceIds.filter(id => prev.map.has(id) && curr.map.has(id));
+  // ── 4. Parallel 5ths and octaves (voice-agnostic) ────────────────────────
+  // Rule: any pair of simultaneously active notes forming a P5 (or P8),
+  // followed by another P5 (or P8) with same-direction motion, is a violation.
+  // Voice ID is used only for succession tracking (which note follows which),
+  // not as a filter on which pairs to compare.
+  const noteVoiceId = new Map<string, string>();
+  for (const v of activeVoices) {
+    for (const n of v.notes) noteVoiceId.set(n.id, v.id);
+  }
 
-    for (let a = 0; a < common.length; a++) {
-      for (let b = a + 1; b < common.length; b++) {
-        const idA = common[a];
-        const idB = common[b];
+  const seenParallel = new Set<string>();
 
-        const pA = spelledPitchToMidi(prev.map.get(idA)!.spelledPitch);
-        const pB = spelledPitchToMidi(prev.map.get(idB)!.spelledPitch);
-        const cA = spelledPitchToMidi(curr.map.get(idA)!.spelledPitch);
-        const cB = spelledPitchToMidi(curr.map.get(idB)!.spelledPitch);
+  for (let i = 1; i < allBeats.length; i++) {
+    const prevBeat = allBeats[i - 1];
+    const currBeat = allBeats[i];
 
-        const motionA = cA - pA;
-        const motionB = cB - pB;
-        if (motionA === 0 || motionB === 0) continue;
-        if (Math.sign(motionA) !== Math.sign(motionB)) continue; // contrary = fine
+    // All notes sounding at prevBeat (started at or before, not yet ended)
+    const prevActive = activeVoices.flatMap(v =>
+      voiceTimelines.get(v.id)!.filter(
+        n => n.startBeat <= prevBeat && prevBeat < n.startBeat + DURATION_BEATS[n.duration],
+      )
+    );
 
-        const intervalPrev = Math.abs(pA - pB);
-        const intervalCurr = Math.abs(cA - cB);
+    for (let ai = 0; ai < prevActive.length; ai++) {
+      for (let bi = ai + 1; bi < prevActive.length; bi++) {
+        const a = prevActive[ai];
+        const b = prevActive[bi];
+        const midiA = spelledPitchToMidi(a.spelledPitch);
+        const midiB = spelledPitchToMidi(b.spelledPitch);
+        const ivPrev = Math.abs(midiA - midiB);
+        const isP5prev = ivPrev % 12 === 7;
+        const isP8prev = ivPrev % 12 === 0 && ivPrev > 0;
+        if (!isP5prev && !isP8prev) continue;
 
-        if (intervalPrev % 12 === 7 && intervalCurr % 12 === 7) {
-          diags.push({
-            severity: 'error',
-            type: 'parallel-fifth',
-            message: `Parallel 5ths between voices at beat ${curr.beat + 1}`,
-            noteIds: [curr.map.get(idA)!.id, curr.map.get(idB)!.id],
-            beat: curr.beat,
-          });
-        }
+        // Successors: all notes active in each note's voice at currBeat
+        const succsA = voiceTimelines.get(noteVoiceId.get(a.id)!)!.filter(
+          n => n.startBeat <= currBeat && currBeat < n.startBeat + DURATION_BEATS[n.duration],
+        );
+        const succsB = voiceTimelines.get(noteVoiceId.get(b.id)!)!.filter(
+          n => n.startBeat <= currBeat && currBeat < n.startBeat + DURATION_BEATS[n.duration],
+        );
 
-        if (intervalPrev % 12 === 0 && intervalPrev > 0 &&
-            intervalCurr % 12 === 0 && intervalCurr > 0) {
-          diags.push({
-            severity: 'error',
-            type: 'parallel-octave',
-            message: `Parallel octaves between voices at beat ${curr.beat + 1}`,
-            noteIds: [curr.map.get(idA)!.id, curr.map.get(idB)!.id],
-            beat: curr.beat,
-          });
-        }
+        for (const ap of succsA) {
+          for (const bp of succsB) {
+            if (ap.id === bp.id) continue;
+            const midiAp = spelledPitchToMidi(ap.spelledPitch);
+            const midiBp = spelledPitchToMidi(bp.spelledPitch);
+            const ivCurr = Math.abs(midiAp - midiBp);
+            const motionA = midiAp - midiA;
+            const motionB = midiBp - midiB;
+            if (motionA === 0 || motionB === 0) continue; // oblique motion
+            if (Math.sign(motionA) !== Math.sign(motionB)) continue; // contrary
 
-        // ── 5. Hidden 5ths and octaves (outer voices only) ──────────────────
-        const isOuterPair =
-          (orderedVoiceIds.indexOf(idA) === 0 && orderedVoiceIds.indexOf(idB) === orderedVoiceIds.length - 1) ||
-          (orderedVoiceIds.indexOf(idB) === 0 && orderedVoiceIds.indexOf(idA) === orderedVoiceIds.length - 1);
+            if (isP5prev && ivCurr % 12 === 7) {
+              const key = `p5:${[ap.id, bp.id].sort().join(':')}`;
+              if (!seenParallel.has(key)) {
+                seenParallel.add(key);
+                diags.push({
+                  severity: 'error',
+                  type: 'parallel-fifth',
+                  message: `Parallel 5ths at beat ${currBeat + 1}`,
+                  noteIds: [ap.id, bp.id],
+                  beat: currBeat,
+                });
+              }
+            }
 
-        if (isOuterPair) {
-          const upperMotion = cA > cB ? motionA : motionB;
-          if (Math.abs(upperMotion) > 2) {
-            if (intervalCurr % 12 === 7) {
-              diags.push({
-                severity: 'error',
-                type: 'hidden-fifth',
-                message: `Hidden 5th between outer voices at beat ${curr.beat + 1} (upper voice leaps to perfect 5th)`,
-                noteIds: [curr.map.get(idA)!.id, curr.map.get(idB)!.id],
-                beat: curr.beat,
-              });
-            } else if (intervalCurr % 12 === 0 && intervalCurr > 0) {
-              diags.push({
-                severity: 'error',
-                type: 'hidden-octave',
-                message: `Hidden octave between outer voices at beat ${curr.beat + 1} (upper voice leaps to octave)`,
-                noteIds: [curr.map.get(idA)!.id, curr.map.get(idB)!.id],
-                beat: curr.beat,
-              });
+            if (isP8prev && ivCurr % 12 === 0 && ivCurr > 0) {
+              const key = `p8:${[ap.id, bp.id].sort().join(':')}`;
+              if (!seenParallel.has(key)) {
+                seenParallel.add(key);
+                diags.push({
+                  severity: 'error',
+                  type: 'parallel-octave',
+                  message: `Parallel octaves at beat ${currBeat + 1}`,
+                  noteIds: [ap.id, bp.id],
+                  beat: currBeat,
+                });
+              }
             }
           }
         }
+      }
+    }
+  }
+
+  // ── 5. Hidden 5ths and octaves (outer voices only) ────────────────────────
+  {
+    const outerLowId  = orderedVoiceIds[0];
+    const outerHighId = orderedVoiceIds[orderedVoiceIds.length - 1];
+    for (let i = 1; i < snapshots.length; i++) {
+      const prev = snapshots[i - 1];
+      const curr = snapshots[i];
+      if (!prev.map.has(outerLowId) || !prev.map.has(outerHighId)) continue;
+      if (!curr.map.has(outerLowId) || !curr.map.has(outerHighId)) continue;
+
+      const pA = spelledPitchToMidi(prev.map.get(outerLowId)!.spelledPitch);
+      const pB = spelledPitchToMidi(prev.map.get(outerHighId)!.spelledPitch);
+      const cA = spelledPitchToMidi(curr.map.get(outerLowId)!.spelledPitch);
+      const cB = spelledPitchToMidi(curr.map.get(outerHighId)!.spelledPitch);
+
+      const motionA = cA - pA;
+      const motionB = cB - pB;
+      if (motionA === 0 || motionB === 0) continue;
+      if (Math.sign(motionA) !== Math.sign(motionB)) continue;
+
+      const intervalCurr = Math.abs(cA - cB);
+      const upperMotion = cA > cB ? motionA : motionB;
+      if (Math.abs(upperMotion) <= 2) continue;
+
+      if (intervalCurr % 12 === 7) {
+        diags.push({
+          severity: 'error',
+          type: 'hidden-fifth',
+          message: `Hidden 5th between outer voices at beat ${curr.beat + 1} (upper voice leaps to perfect 5th)`,
+          noteIds: [curr.map.get(outerLowId)!.id, curr.map.get(outerHighId)!.id],
+          beat: curr.beat,
+        });
+      } else if (intervalCurr % 12 === 0 && intervalCurr > 0) {
+        diags.push({
+          severity: 'error',
+          type: 'hidden-octave',
+          message: `Hidden octave between outer voices at beat ${curr.beat + 1} (upper voice leaps to octave)`,
+          noteIds: [curr.map.get(outerLowId)!.id, curr.map.get(outerHighId)!.id],
+          beat: curr.beat,
+        });
       }
     }
   }

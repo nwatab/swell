@@ -146,6 +146,19 @@ NoteBinding と NoteFunction は直交する概念：
 - ADR-005: LLM への楽譜情報の渡し方（chord_tone binding で Option A が tractable に）
 - ADR-007: NoteFunction（Analytical layer の出力 — NoteBinding とは直交）
 
+## PoC 制約（SATB 4声）
+
+現フェーズでは`chord_tone`のみを実装する。
+
+| バリアント | 状態 |
+|-----------|------|
+| `chord_tone` | **実装対象**（SATB 4声の和音入力で使用） |
+| `absolute` | 将来拡張（クロマチック経過音・ペダルポイント等） |
+| `scale_degree` | 将来拡張（モーダル音楽向け） |
+
+`NoteBinding`型を今から3バリアントで定義しておき、実装は`chord_tone`のみとする。
+これにより将来の拡張が型レベルで保証される。
+
 ## Notes
 
 - `scale_degree` binding は modal music（Dorian、Mixolydian 等）で主に使用

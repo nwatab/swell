@@ -159,7 +159,7 @@ describe('getDiatonicChordIntervals', () => {
 // ── analyzeHarmony — parallel fifths ─────────────────────────────────────────
 
 describe('analyzeHarmony — parallel fifths', () => {
-  it('detects parallel fifths between two voices', () => {
+  it('detects parallel fifths between two separate voices', () => {
     // Bass: C4→G4, Soprano: G4→D5 — both move up a fifth in parallel
     const comp: Composition = {
       ...BASE,
@@ -173,7 +173,39 @@ describe('analyzeHarmony — parallel fifths', () => {
     expect(p5[0].severity).toBe('error');
   });
 
+  it('detects parallel fifths within a single voice (polyphonic)', () => {
+    // Soprano alone: [C4+G4] → [D4+A4] — same voice, both pairs are P5, parallel upward
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('soprano', [
+          spNote('s1', 60, 0), spNote('s2', 67, 0),  // C4 + G4 at beat 0
+          spNote('s3', 62, 1), spNote('s4', 69, 1),  // D4 + A4 at beat 1
+        ]),
+      ],
+    };
+    const p5 = analyzeHarmony(comp).filter(d => d.type === 'parallel-fifth');
+    expect(p5).toHaveLength(1);
+    expect(p5[0].severity).toBe('error');
+  });
+
+  it('detects parallel fifths with compound interval (>12 semitones)', () => {
+    // Bass: C3(48)+G4(67) [19st = compound P5] → D3(50)+A4(69) same direction
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('bass', [
+          spNote('b1', 48, 0), spNote('b2', 67, 0),
+          spNote('b3', 50, 1), spNote('b4', 69, 1),
+        ]),
+      ],
+    };
+    const p5 = analyzeHarmony(comp).filter(d => d.type === 'parallel-fifth');
+    expect(p5).toHaveLength(1);
+  });
+
   it('no parallel fifths when motion is contrary', () => {
+    // Bass up, Soprano down — contrary motion
     const comp: Composition = {
       ...BASE,
       voices: [
@@ -181,15 +213,41 @@ describe('analyzeHarmony — parallel fifths', () => {
         makeVoice('soprano', [spNote('s1', 67, 0), spNote('s2', 60, 1)]),
       ],
     };
-    const diags = analyzeHarmony(comp).filter(d => d.type === 'parallel-fifth');
-    expect(diags).toHaveLength(0);
+    expect(analyzeHarmony(comp).filter(d => d.type === 'parallel-fifth')).toHaveLength(0);
+  });
+
+  it('no parallel fifths when motion is oblique (one voice stationary)', () => {
+    // Bass stays on C4, Soprano moves G4→D5 — oblique motion, no violation
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('bass',    [spNote('b1', 60, 0), spNote('b2', 60, 1)]),
+        makeVoice('soprano', [spNote('s1', 67, 0), spNote('s2', 74, 1)]),
+      ],
+    };
+    expect(analyzeHarmony(comp).filter(d => d.type === 'parallel-fifth')).toHaveLength(0);
+  });
+
+  it('no parallel fifths when interval changes (P5 → non-P5)', () => {
+    // Bass: C4→D4, Soprano: G4→A4 but soprano jumps differently so interval breaks
+    // Bass C4(60)→E4(64), Soprano G4(67)→B4(71): interval was 7, becomes 7 — wait, same
+    // Use: Bass C4(60)→D4(62), Soprano G4(67)→B4(71): interval 7→9, no parallel
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('bass',    [spNote('b1', 60, 0), spNote('b2', 62, 1)]),
+        makeVoice('soprano', [spNote('s1', 67, 0), spNote('s2', 71, 1)]),
+      ],
+    };
+    expect(analyzeHarmony(comp).filter(d => d.type === 'parallel-fifth')).toHaveLength(0);
   });
 });
 
 // ── analyzeHarmony — parallel octaves ────────────────────────────────────────
 
 describe('analyzeHarmony — parallel octaves', () => {
-  it('detects parallel octaves', () => {
+  it('detects parallel octaves between two separate voices', () => {
+    // Bass: C4(60)→G4(67), Soprano: C5(72)→G5(79) — both octaves, same direction
     const comp: Composition = {
       ...BASE,
       voices: [
@@ -200,6 +258,44 @@ describe('analyzeHarmony — parallel octaves', () => {
     const p8 = analyzeHarmony(comp).filter(d => d.type === 'parallel-octave');
     expect(p8).toHaveLength(1);
     expect(p8[0].severity).toBe('error');
+  });
+
+  it('detects parallel octaves within a single voice (polyphonic)', () => {
+    // Soprano alone: [C4(60)+C5(72)] → [D4(62)+D5(74)]
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('soprano', [
+          spNote('s1', 60, 0), spNote('s2', 72, 0),
+          spNote('s3', 62, 1), spNote('s4', 74, 1),
+        ]),
+      ],
+    };
+    const p8 = analyzeHarmony(comp).filter(d => d.type === 'parallel-octave');
+    expect(p8).toHaveLength(1);
+    expect(p8[0].severity).toBe('error');
+  });
+
+  it('no parallel octaves when motion is contrary', () => {
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('bass',    [spNote('b1', 60, 0), spNote('b2', 67, 1)]),
+        makeVoice('soprano', [spNote('s1', 72, 0), spNote('s2', 65, 1)]),
+      ],
+    };
+    expect(analyzeHarmony(comp).filter(d => d.type === 'parallel-octave')).toHaveLength(0);
+  });
+
+  it('no parallel octaves when motion is oblique', () => {
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('bass',    [spNote('b1', 60, 0), spNote('b2', 60, 1)]),
+        makeVoice('soprano', [spNote('s1', 72, 0), spNote('s2', 79, 1)]),
+      ],
+    };
+    expect(analyzeHarmony(comp).filter(d => d.type === 'parallel-octave')).toHaveLength(0);
   });
 });
 
