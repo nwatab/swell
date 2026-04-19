@@ -1,6 +1,7 @@
 import { toResolution, snapBeat, snapBeatFloor } from './snap';
 
 describe('toResolution', () => {
+  it('returns 2 for 1/2', () => expect(toResolution('1/2')).toBe(2));
   it('returns 1 for 1/4', () => expect(toResolution('1/4')).toBe(1));
   it('returns 0.5 for 1/8', () => expect(toResolution('1/8')).toBe(0.5));
   it('returns 0.25 for 1/16', () => expect(toResolution('1/16')).toBe(0.25));

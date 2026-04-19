@@ -10,7 +10,7 @@ interface SnapSelectorProps {
 export default function SnapSelector({ snapDiv, onSnapDivChange }: SnapSelectorProps) {
   return (
     <div className="flex items-center gap-1">
-      {(['1/4', '1/8', '1/16'] as const).map(div => (
+      {(['1/2', '1/4', '1/8', '1/16'] as const).map(div => (
         <button
           key={div}
           onClick={() => onSnapDivChange(div)}
