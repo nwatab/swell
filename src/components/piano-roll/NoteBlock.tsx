@@ -2,7 +2,7 @@
 
 import type { Note } from '../../types/song';
 import { spelledPitchToString, spelledPitchToMidi } from '../../lib/harmony';
-import { pitchY, pitchBlockH, isBlack } from './layout';
+import { noteBlockY, NOTE_H, isBlack } from './layout';
 
 export type NoteVariant = 'normal' | 'added' | 'removed' | 'dragging';
 
@@ -28,12 +28,12 @@ export default function NoteBlock({ note, cellW, variant = 'normal', color = '#3
       title={spelledPitchToString(note.spelledPitch)}
       style={{
         left: note.startBeat * cellW + 1,
-        top: pitchY(midi) + 2,
+        top: noteBlockY(midi),
         width: note.duration === 'whole'   ? 4 * cellW - 2 :
                note.duration === 'half'    ? 2 * cellW - 2 :
                note.duration === 'quarter' ? 1 * cellW - 2 :
                                              0.5 * cellW - 2,
-        height: pitchBlockH(midi) - 4,
+        height: NOTE_H,
         zIndex: isBlack(midi) ? 4 : 3,
         ...style,
       }}

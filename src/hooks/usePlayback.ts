@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { Composition } from '../types/song';
+import { totalBeats, DURATION_BEATS } from '../types/song';
 import { playComposition } from '../lib/audio';
 
 export interface UsePlaybackReturn {
@@ -20,6 +21,7 @@ export const usePlayback = (activeComposition: Composition): UsePlaybackReturn =
   const playStartWallRef = useRef<number>(0);
   const activeCompositionRef = useRef<Composition>(activeComposition);
   activeCompositionRef.current = activeComposition;
+  const isPlayingRef = useRef(false);
 
   const getCtx = (): AudioContext => {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
@@ -28,6 +30,7 @@ export const usePlayback = (activeComposition: Composition): UsePlaybackReturn =
   };
 
   const stopPlayback = useCallback(() => {
+    isPlayingRef.current = false;
     cancelAnimationFrame(rafRef.current);
     stopOscillatorsRef.current?.();
     stopOscillatorsRef.current = null;
@@ -39,15 +42,20 @@ export const usePlayback = (activeComposition: Composition): UsePlaybackReturn =
     const comp = activeCompositionRef.current;
     const ctx = getCtx();
     const bps = comp.bpm / 60;
+    const lastNoteEnd = comp.voices
+      .flatMap(v => v.notes)
+      .reduce((max, n) => Math.max(max, n.startBeat + DURATION_BEATS[n.duration]), 0);
+    const total = lastNoteEnd > 0 ? lastNoteEnd : totalBeats(comp);
     stopOscillatorsRef.current = playComposition(ctx, comp);
     playStartWallRef.current = performance.now();
+    isPlayingRef.current = true;
     setPlaying(true);
 
     const tick = () => {
+      if (!isPlayingRef.current) return;
       const elapsed = (performance.now() - playStartWallRef.current) / 1000;
       const beat = elapsed * bps;
-      const { measureCount, timeSignature } = activeCompositionRef.current;
-      if (beat >= measureCount * timeSignature.numerator) { stopPlayback(); return; }
+      if (beat >= total) { stopPlayback(); return; }
       setPlayhead(beat);
       rafRef.current = requestAnimationFrame(tick);
     };
