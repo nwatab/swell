@@ -50,8 +50,7 @@ src/
 ├── lib/                     # 純粋関数のみ。React依存禁止。単体テスト対象
 │   ├── music/               # 音楽ドメインロジック
 │   │   ├── chord.ts         # コードタイプ・インターバル定義
-│   │   ├── note-operations.ts # ノート追加・移動・転調・和音展開
-│   │   ├── voice.ts         # 声部単位のノート操作（add/remove/move/find）
+│   │   ├── note-operations.ts # ノート追加・移動・削除・転調・和音展開・声部検索
 │   │   └── score-repr.ts    # Composition → LLM可読テキスト変換
 │   ├── swell-format/        # Import/Export
 │   ├── harmony.ts           # 和声分析（既存）

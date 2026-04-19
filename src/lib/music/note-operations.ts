@@ -1,4 +1,4 @@
-import type { Composition, Note, PitchClass, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
+import type { Composition, Voice, Note, PitchClass, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
 import { VOICE_ORDER } from '../../types/song';
 import { spellMidi, spelledPitchToMidi } from '../harmony';
 import { genId } from '../id';
@@ -150,6 +150,10 @@ export const transposeComposition = (
     measures: composition.measures.map(m => ({ ...m, root: transposePc(m.root) })),
   };
 };
+
+/** Find which voice contains a given note ID. */
+export const findVoiceForNote = (composition: Composition, noteId: string): Voice | undefined =>
+  composition.voices.find(v => v.notes.some(n => n.id === noteId));
 
 /** Move a note to a new beat/pitch. spelledPitch is derived from MIDI drag position. */
 export const moveNote = (
