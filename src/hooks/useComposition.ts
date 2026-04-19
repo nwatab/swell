@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import type { Composition, KeySignature } from '../types/song';
 import { DEFAULT_COMPOSITION } from '../types/song';
 import { downloadSwell } from '../lib/swell-format/serialize';
+import { transposeComposition } from '../lib/music/note-operations';
 
 export interface UseCompositionReturn {
   composition: Composition;
@@ -32,10 +33,8 @@ export const useComposition = (): UseCompositionReturn => {
     setComposition(s => ({ ...s, bpm }));
   }, []);
 
-  // Key change: notes keep their SpelledPitch unchanged.
-  // The harmonic interpretation changes; notes are not moved.
   const handleKeyChange = useCallback((key: KeySignature) => {
-    setComposition(s => ({ ...s, keySignature: key }));
+    setComposition(s => transposeComposition(s, key));
   }, []);
 
   return {

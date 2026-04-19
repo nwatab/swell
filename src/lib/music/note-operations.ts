@@ -1,4 +1,4 @@
-import type { Composition, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
+import type { Composition, Note, PitchClass, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
 import { VOICE_ORDER } from '../../types/song';
 import { spellMidi, spelledPitchToMidi } from '../harmony';
 import { genId } from '../id';
@@ -112,6 +112,44 @@ export const removeNote = (composition: Composition, noteId: string): Compositio
     notes: v.notes.filter(n => n.id !== noteId),
   })),
 });
+
+/**
+ * Transpose all notes and chord declaration roots by the chromatic distance
+ * between the old and new key roots. Notes are re-spelled in the new key context.
+ * Delta is clamped to [-6, +6] to minimise register displacement.
+ */
+export const transposeComposition = (
+  composition: Composition,
+  newKey: KeySignature,
+): Composition => {
+  const pcOf = (p: PitchClass): number =>
+    spelledPitchToMidi({ letter: p.letter, accidental: p.accidental, octave: 4 }) % 12;
+
+  const raw = ((pcOf(newKey.tonic) - pcOf(composition.keySignature.tonic)) + 12) % 12;
+  const delta = raw > 6 ? raw - 12 : raw;
+
+  if (delta === 0) return { ...composition, keySignature: newKey };
+
+  const transposeNote = (n: Note): Note => ({
+    ...n,
+    spelledPitch: spellMidi(spelledPitchToMidi(n.spelledPitch) + delta, newKey),
+  });
+
+  const transposePc = (pc: PitchClass): PitchClass => {
+    const { letter, accidental } = spellMidi(
+      spelledPitchToMidi({ letter: pc.letter, accidental: pc.accidental, octave: 4 }) + delta,
+      newKey,
+    );
+    return { letter, accidental };
+  };
+
+  return {
+    ...composition,
+    keySignature: newKey,
+    voices: composition.voices.map(v => ({ ...v, notes: v.notes.map(transposeNote) })),
+    measures: composition.measures.map(m => ({ ...m, root: transposePc(m.root) })),
+  };
+};
 
 /** Move a note to a new beat/pitch. spelledPitch is derived from MIDI drag position. */
 export const moveNote = (
