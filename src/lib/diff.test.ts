@@ -1,7 +1,6 @@
 import { diffCompositions } from './diff';
 import type { Composition, Note } from '../types/song';
 import { DEFAULT_COMPOSITION } from '../types/song';
-import { genId } from './id';
 
 const BASE: Composition = DEFAULT_COMPOSITION;
 

@@ -7,8 +7,7 @@ import {
   spreadChordAcrossVoices,
 } from './note-operations';
 import type { Composition, KeySignature, SpelledPitch } from '../../types/song';
-import { DEFAULT_COMPOSITION, VOICE_ORDER } from '../../types/song';
-import { spellMidi } from '../harmony';
+import { DEFAULT_COMPOSITION } from '../../types/song';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -21,7 +20,6 @@ const sopranoVoiceId = (): string => BASE.voices.find(v => v.role === 'soprano')
 const C4: SpelledPitch = { letter: 'C', accidental: 0, octave: 4 };
 const E4: SpelledPitch = { letter: 'E', accidental: 0, octave: 4 };
 const G4: SpelledPitch = { letter: 'G', accidental: 0, octave: 4 };
-const D4: SpelledPitch = { letter: 'D', accidental: 0, octave: 4 };
 
 // ── addNote ───────────────────────────────────────────────────────────────────
 
@@ -194,15 +192,6 @@ describe('spreadChordAcrossVoices', () => {
 
   it('distributes pitches low to high bass→soprano', () => {
     const result = spreadChordAcrossVoices(BASE, 60, 0, 'quarter', MAJ_INTERVALS, C_MAJOR);
-    // VOICE_ORDER is bass-first; each voice should have ascending MIDI pitch
-    const orderedVoices = [...result.voices].sort(
-      (a, b) => VOICE_ORDER.indexOf(a.role) - VOICE_ORDER.indexOf(b.role),
-    );
-    const midis = orderedVoices.map(v => {
-      const sp = v.notes[0].spelledPitch;
-      return spellMidi === undefined ? 0 : (sp.octave + 1) * 12 +
-        ['C','','D','','E','F','','G','','A','','B'].indexOf(sp.letter) * 1 + sp.accidental;
-    });
     // Bass gets root (60=C4), each subsequent voice gets next chord tone
     const bassNote = result.voices.find(v => v.role === 'bass')!.notes[0];
     expect(bassNote.spelledPitch).toEqual(C4);

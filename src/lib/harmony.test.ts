@@ -19,7 +19,6 @@ const C_MAJOR:  KeySignature = { tonic: { letter: 'C', accidental:  0 }, mode: '
 const G_MAJOR:  KeySignature = { tonic: { letter: 'G', accidental:  0 }, mode: 'major' };
 const EB_MAJOR: KeySignature = { tonic: { letter: 'E', accidental: -1 }, mode: 'major' };
 const C_MINOR:  KeySignature = { tonic: { letter: 'C', accidental:  0 }, mode: 'minor' };
-const A_MINOR:  KeySignature = { tonic: { letter: 'A', accidental:  0 }, mode: 'minor' };
 const CS_MAJOR: KeySignature = { tonic: { letter: 'C', accidental:  1 }, mode: 'major' };
 
 const BASE: Composition = { ...DEFAULT_COMPOSITION, keySignature: C_MAJOR };

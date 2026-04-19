@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import type { Diagnostic } from '../../lib/harmony';
 
 const SEVERITY_ICON: Record<Diagnostic['severity'], string> = {

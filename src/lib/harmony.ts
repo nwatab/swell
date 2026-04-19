@@ -72,7 +72,7 @@ const MINOR_DEGREE_SPELLINGS: readonly (readonly [NoteLetter, Accidental][])[] =
 // ── Key utilities ─────────────────────────────────────────────────────────────
 
 /** Returns the active key. Modulations are not supported in MVP — always returns keySignature. */
-export const keyAtBeat = (song: Composition, _beat: number): KeySignature =>
+export const keyAtBeat = (song: Composition, _: number): KeySignature =>
   song.keySignature;
 
 /** Root pitch class index (0–11) for a key. */
@@ -379,9 +379,6 @@ const isForbiddenMelodicInterval = (a: SpelledPitch, b: SpelledPitch): boolean =
 };
 
 // ── Harmony analysis ──────────────────────────────────────────────────────────
-
-const pitchLabel = (midi: number, key: KeySignature): string =>
-  spelledPitchToString(spellMidi(midi, key));
 
 /**
  * Analyze a composition for harmony violations.

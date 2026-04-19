@@ -1,5 +1,5 @@
 import type { Note, Composition } from '../types/song';
-import { DURATION_BEATS, totalBeats } from '../types/song';
+import { DURATION_BEATS } from '../types/song';
 import { spelledPitchToMidi } from './harmony';
 
 const midiToFreq = (midi: number): number =>

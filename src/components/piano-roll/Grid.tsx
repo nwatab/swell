@@ -26,7 +26,6 @@ export default function Grid({
   resolution,
   globalKey,
 }: GridProps) {
-  const gridWidth = totalBeats * cellW;
   const gridHeight = NUM_WHITE_KEYS * WHITE_H;
 
   return (
