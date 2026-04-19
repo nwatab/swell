@@ -4,6 +4,7 @@ import type { Composition } from '../../../types/song';
 import { beatsPerMeasure } from '../../../types/song';
 import { analyzeHarmony } from '../../../lib/harmony';
 import type { Diagnostic } from '../../../lib/harmony';
+import { validateComposition } from '../../../lib/swell-format/deserialize';
 
 const client = new Anthropic();
 
@@ -43,7 +44,13 @@ Rules:
 - Generate new short unique ids (e.g. "n1", "n2") for new notes
 - Only output the modified JSON — no explanations, no markdown fences, no comments
 - Keep all existing notes unless the user explicitly asks to remove some
-- Do NOT change timeSignature or measureCount unless explicitly asked`;
+- Do NOT change timeSignature or measureCount unless explicitly asked
+
+When fixing harmonic problems (parallel 5ths/octaves, voice crossing, etc.):
+- You MUST change spelledPitch values of the offending notes — that is the fix
+- Keep the same note id when modifying a note's pitch (you are editing, not replacing)
+- Moving a voice by a step or third to break the parallel motion is the standard fix
+- Do not return the composition unchanged — a no-op is not a valid fix`;
 
 const TOOLS: Anthropic.Tool[] = [
   {
@@ -144,15 +151,26 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'No response from model' }, { status: 500 });
         }
         const raw = textBlock.text.replace(/^```[a-z]*\n?/gm, '').replace(/```$/gm, '').trim();
+        let parsed: unknown;
         try {
-          const suggestedComposition: Composition = JSON.parse(raw);
-          return NextResponse.json({ suggestedComposition });
+          parsed = JSON.parse(raw);
         } catch {
-          return NextResponse.json(
-            { error: 'Model returned invalid JSON', raw: textBlock.text },
-            { status: 500 },
-          );
+          messages.push({
+            role: 'user',
+            content:
+              'Your response was not valid JSON. Output only the JSON object — no markdown, no explanation.',
+          });
+          continue;
         }
+        const validationError = validateComposition(parsed);
+        if (validationError) {
+          messages.push({
+            role: 'user',
+            content: `Your JSON failed schema validation: ${validationError}. Fix it and output only the corrected JSON.`,
+          });
+          continue;
+        }
+        return NextResponse.json({ suggestedComposition: parsed as Composition });
       }
 
       if (response.stop_reason === 'tool_use') {

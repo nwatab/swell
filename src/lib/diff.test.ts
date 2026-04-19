@@ -4,9 +4,9 @@ import { DEFAULT_COMPOSITION } from '../types/song';
 
 const BASE: Composition = DEFAULT_COMPOSITION;
 
-const note = (id: string): Note => ({
+const note = (id: string, octave = 4): Note => ({
   id,
-  spelledPitch: { letter: 'C', accidental: 0, octave: 4 },
+  spelledPitch: { letter: 'C', accidental: 0, octave },
   startBeat: 0,
   duration: 'quarter',
 });
@@ -26,6 +26,7 @@ describe('diffCompositions', () => {
     expect(result.unchanged).toHaveLength(1);
     expect(result.added).toHaveLength(0);
     expect(result.removed).toHaveLength(0);
+    expect(result.modified).toHaveLength(0);
   });
 
   it('detects added notes', () => {
@@ -54,10 +55,23 @@ describe('diffCompositions', () => {
     expect(result.added.map(n => n.id)).toContain('fresh');
   });
 
+  it('detects modified notes (same id, different pitch)', () => {
+    const original = withNote(BASE, note('x', 4));
+    const suggested = withNote(BASE, note('x', 5));
+    const result = diffCompositions(original, suggested);
+    expect(result.modified).toHaveLength(1);
+    expect(result.modified[0].before.spelledPitch.octave).toBe(4);
+    expect(result.modified[0].after.spelledPitch.octave).toBe(5);
+    expect(result.unchanged).toHaveLength(0);
+    expect(result.added).toHaveLength(0);
+    expect(result.removed).toHaveLength(0);
+  });
+
   it('both empty → all arrays empty', () => {
     const result = diffCompositions(BASE, BASE);
     expect(result.added).toHaveLength(0);
     expect(result.removed).toHaveLength(0);
     expect(result.unchanged).toHaveLength(0);
+    expect(result.modified).toHaveLength(0);
   });
 });

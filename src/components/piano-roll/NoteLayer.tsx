@@ -32,6 +32,10 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
       ? [
           ...suggestion.diff.unchanged.map(note => ({ note, variant: 'normal' as const })),
           ...suggestion.diff.removed.map(note => ({ note, variant: 'removed' as const })),
+          ...suggestion.diff.modified.flatMap(({ before, after }) => [
+            { note: before, variant: 'removed' as const },
+            { note: after, variant: 'added' as const },
+          ]),
           ...suggestion.diff.added.map(note => ({ note, variant: 'added' as const })),
         ]
       : allNotes(composition);
