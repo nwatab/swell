@@ -15,6 +15,7 @@ export const BLACK_H = 16;   // px for black-key overlay band
 export const KEY_W = 64;
 export const HEADER_H = 32;
 export const CHORD_HEADER_H = 22;
+export const DEGREE_HEADER_H = 18;
 
 export const MIN_PITCH = 36; // C2
 export const MAX_PITCH = 84; // C6

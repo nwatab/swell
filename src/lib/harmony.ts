@@ -16,6 +16,9 @@ import type {
   NoteLetter,
   Accidental,
   VoiceRole,
+  HarmonicDeclaration,
+  ChordQuality,
+  PitchClass,
 } from '../types/song';
 import { DURATION_BEATS } from '../types/song';
 
@@ -117,6 +120,47 @@ export const romanNumeral = (midi: number, key: KeySignature): string | null => 
     : ROMAN_NUMERALS_MINOR[deg];
 };
 
+// Roman numeral base (always uppercase; cased by quality below)
+const BASE_ROMANS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const;
+
+const QUALITY_IS_MAJOR: Record<ChordQuality, boolean> = {
+  maj: true, aug: true, dom7: true, maj7: true,
+  min: false, dim: false, min7: false, hdim7: false, dim7: false,
+};
+
+const DEGREE_QUALITY_SUFFIX: Record<ChordQuality, string> = {
+  maj: '', min: '', dim: '°', aug: '+',
+  dom7: '7', maj7: 'M7', min7: '7', hdim7: 'ø7', dim7: '°7',
+};
+
+/**
+ * Roman numeral degree label for a chord in a key context.
+ * Diatonic roots → "V7", "ii°", "IM7"; chromatic roots → "♭VII7", "♯IV°".
+ * Prefers ♭ prefix over ♯ for chromatic roots (borrowed chords are more common).
+ */
+export const chordDegreeLabel = (decl: HarmonicDeclaration, key: KeySignature): string => {
+  const pc = ((LETTER_SEMITONES[decl.root.letter] + decl.root.accidental) + 12) % 12;
+  const rel = ((pc - rootPc(key)) + 12) % 12;
+  const intervals = modeIntervals(key) as readonly number[];
+
+  let degIdx = intervals.indexOf(rel);
+  let accPrefix = '';
+
+  if (degIdx === -1) {
+    const flatTarget = (rel + 1) % 12;
+    const sharpTarget = (rel - 1 + 12) % 12;
+    const flatDeg = intervals.indexOf(flatTarget);
+    const sharpDeg = intervals.indexOf(sharpTarget);
+    if (flatDeg !== -1) { degIdx = flatDeg; accPrefix = '♭'; }
+    else if (sharpDeg !== -1) { degIdx = sharpDeg; accPrefix = '♯'; }
+    else return `${decl.root.letter}${DEGREE_QUALITY_SUFFIX[decl.quality]}`; // fallback
+  }
+
+  const base = BASE_ROMANS[degIdx];
+  const cased = QUALITY_IS_MAJOR[decl.quality] ? base : base.toLowerCase();
+  return accPrefix + cased + DEGREE_QUALITY_SUFFIX[decl.quality];
+};
+
 // ── Diatonic chord intervals ──────────────────────────────────────────────────
 //
 // Semitone intervals for the triad / seventh chord built on each scale degree.
@@ -165,6 +209,16 @@ const DIATONIC_SEVENTHS: Record<string, readonly (readonly number[])[]> = {
   ],
 };
 
+const DIATONIC_TRIAD_QUALITY: Record<string, readonly ChordQuality[]> = {
+  major: ['maj', 'min', 'min', 'maj', 'maj', 'min', 'dim'],
+  minor: ['min', 'dim', 'maj', 'min', 'min', 'maj', 'maj'],
+};
+
+const DIATONIC_SEVENTH_QUALITY: Record<string, readonly ChordQuality[]> = {
+  major: ['maj7', 'min7', 'min7', 'maj7', 'dom7', 'min7', 'hdim7'],
+  minor: ['min7', 'hdim7', 'maj7', 'min7', 'min7', 'maj7', 'dom7'],
+};
+
 /**
  * Returns the diatonic chord intervals (semitones from root) for a pitch in a key,
  * or null if the pitch is not diatonic.
@@ -180,6 +234,43 @@ export const getDiatonicChordIntervals = (
   if (deg === -1) return null;
   const table = withSeventh ? DIATONIC_SEVENTHS : DIATONIC_TRIADS;
   return table[key.mode][deg];
+};
+
+/** ChordQuality for the diatonic triad or seventh chord built on the given MIDI pitch in the key. */
+export const diatonicChordQuality = (midi: number, key: KeySignature, withSeventh = false): ChordQuality | null => {
+  const deg = scaleDegreeIndex(((midi % 12) + 12) % 12, key);
+  if (deg === -1) return null;
+  return withSeventh ? DIATONIC_SEVENTH_QUALITY[key.mode][deg] : DIATONIC_TRIAD_QUALITY[key.mode][deg];
+};
+
+/**
+ * Infer the diatonic chord (root + quality) formed by the given notes in the key context.
+ * Checks all 7 scale degrees; prefers seventh chord when all 4 unique pitch classes match exactly.
+ * Returns null if no diatonic chord matches.
+ */
+export const inferChordFromNotes = (
+  notes: readonly { spelledPitch: SpelledPitch }[],
+  key: KeySignature,
+): { root: PitchClass; quality: ChordQuality } | null => {
+  const pcs = [...new Set(notes.map(n => ((spelledPitchToMidi(n.spelledPitch) % 12) + 12) % 12))];
+  const rpc = rootPc(key);
+  const intervals = modeIntervals(key) as number[];
+  const spellings = modeSpellings(key);
+
+  for (let deg = 0; deg < 7; deg++) {
+    const chordRootPc = (rpc + intervals[deg]) % 12;
+    const seventhPcs = (DIATONIC_SEVENTHS[key.mode][deg] as number[]).map(i => (chordRootPc + i) % 12);
+    if (pcs.length === 4 && pcs.every(pc => seventhPcs.includes(pc))) {
+      const [letter, accidental] = spellings[rpc][deg];
+      return { root: { letter, accidental }, quality: DIATONIC_SEVENTH_QUALITY[key.mode][deg] };
+    }
+    const triadPcs = (DIATONIC_TRIADS[key.mode][deg] as number[]).map(i => (chordRootPc + i) % 12);
+    if (pcs.every(pc => triadPcs.includes(pc))) {
+      const [letter, accidental] = spellings[rpc][deg];
+      return { root: { letter, accidental }, quality: DIATONIC_TRIAD_QUALITY[key.mode][deg] };
+    }
+  }
+  return null;
 };
 
 // ── Key transform ─────────────────────────────────────────────────────────────

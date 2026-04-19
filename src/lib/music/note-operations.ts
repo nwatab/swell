@@ -1,4 +1,4 @@
-import type { Composition, Voice, Note, NoteRole, PitchClass, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
+import type { Composition, Voice, Note, NoteRole, PitchClass, SpelledPitch, NoteDuration, KeySignature, HarmonicDeclaration } from '../../types/song';
 import { VOICE_ORDER } from '../../types/song';
 import { spellMidi, spelledPitchToMidi } from '../harmony';
 import { genId } from '../id';
@@ -187,6 +187,18 @@ export const transposeComposition = (
     measures: composition.measures.map(m => ({ ...m, root: transposePc(m.root) })),
   };
 };
+
+/** Add or replace the HarmonicDeclaration for a measure (upsert by measureIndex). */
+export const upsertHarmonicDeclaration = (
+  composition: Composition,
+  decl: HarmonicDeclaration,
+): Composition => ({
+  ...composition,
+  measures: [
+    ...composition.measures.filter(m => m.measureIndex !== decl.measureIndex),
+    decl,
+  ].sort((a, b) => a.measureIndex - b.measureIndex),
+});
 
 /** Find which voice contains a given note ID. */
 export const findVoiceForNote = (composition: Composition, noteId: string): Voice | undefined =>

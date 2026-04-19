@@ -9,8 +9,9 @@ import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
 import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
 import type { SnapDiv } from '../lib/snap';
-import { addNote, removeNote, removeChord, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
-import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi, spelledPitchToMidi } from '../lib/harmony';
+import { addNote, removeNote, removeChord, moveNote, spreadChordAcrossVoices, upsertHarmonicDeclaration } from '../lib/music/note-operations';
+import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi, spelledPitchToMidi, diatonicChordQuality } from '../lib/harmony';
+import type { ChordQuality } from '../types/song';
 import { yToPitch } from '../components/piano-roll/layout';
 
 export interface UseNoteInteractionReturn {
@@ -154,7 +155,24 @@ export const useNoteInteraction = ({
         if (!voiceId) return;
 
         if (intervals.length > 1) {
-          setComposition(s => spreadChordAcrossVoices(s, rootMidi, snapped, duration, intervals, key));
+          const chordRoot = spellMidi(rootMidi, key);
+          const measureIndex = Math.floor(snapped / composition.timeSignature.numerator);
+          let quality: ChordQuality | null = null;
+          if (chordType === 'maj') quality = 'maj';
+          else if (chordType === 'min') quality = 'min';
+          else if (chordType === 'maj7') quality = 'maj7';
+          else if (chordType === 'min7') quality = 'min7';
+          else if (chordType === 'dia') quality = diatonicChordQuality(rootMidi, key, false);
+          else if (chordType === 'dia7') quality = diatonicChordQuality(rootMidi, key, true);
+          setComposition(s => {
+            const withNotes = spreadChordAcrossVoices(s, rootMidi, snapped, duration, intervals, key);
+            if (quality === null) return withNotes;
+            return upsertHarmonicDeclaration(withNotes, {
+              measureIndex,
+              root: { letter: chordRoot.letter, accidental: chordRoot.accidental },
+              quality,
+            });
+          });
         } else {
           setComposition(s => addNote(s, voiceId, spellMidi(rootMidi, key), snapped, duration));
         }

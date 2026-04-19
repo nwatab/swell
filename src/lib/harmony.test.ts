@@ -8,8 +8,10 @@ import {
   keyAtBeat,
   getDiatonicChordIntervals,
   analyzeHarmony,
+  chordDegreeLabel,
+  inferChordFromNotes,
 } from './harmony';
-import type { KeySignature, Note, Composition, Voice } from '../types/song';
+import type { KeySignature, Note, Composition, Voice, SpelledPitch, HarmonicDeclaration } from '../types/song';
 import { DEFAULT_COMPOSITION } from '../types/song';
 import { genId } from './id';
 
@@ -312,5 +314,119 @@ describe('analyzeHarmony — voice crossing', () => {
     const vc = analyzeHarmony(comp).filter(d => d.type === 'voice-crossing');
     expect(vc).toHaveLength(1);
     expect(vc[0].severity).toBe('warning');
+  });
+});
+
+// ── chordDegreeLabel ──────────────────────────────────────────────────────────
+
+const mkDecl = (letter: string, accidental: number, quality: string): HarmonicDeclaration =>
+  ({ measureIndex: 0, root: { letter, accidental }, quality } as HarmonicDeclaration);
+
+describe('chordDegreeLabel', () => {
+  describe('C major — diatonic triads', () => {
+    it.each([
+      ['C',  0, 'maj', 'I'],
+      ['D',  0, 'min', 'ii'],
+      ['E',  0, 'min', 'iii'],
+      ['F',  0, 'maj', 'IV'],
+      ['G',  0, 'maj', 'V'],
+      ['A',  0, 'min', 'vi'],
+      ['B',  0, 'dim', 'vii°'],
+    ] as const)('%s%s %s → %s', (l, a, q, expected) => {
+      expect(chordDegreeLabel(mkDecl(l, a, q), C_MAJOR)).toBe(expected);
+    });
+  });
+
+  describe('C major — seventh chords', () => {
+    it.each([
+      ['C', 0, 'maj7',  'IM7'],
+      ['D', 0, 'min7',  'ii7'],
+      ['G', 0, 'dom7',  'V7'],
+      ['B', 0, 'hdim7', 'viiø7'],
+      ['B', 0, 'dim7',  'vii°7'],
+    ] as const)('%s%s %s → %s', (l, a, q, expected) => {
+      expect(chordDegreeLabel(mkDecl(l, a, q), C_MAJOR)).toBe(expected);
+    });
+  });
+
+  describe('C major — chromatic (borrowed) roots', () => {
+    it.each([
+      ['B', -1, 'maj',  '♭VII'],
+      ['B', -1, 'dom7', '♭VII7'],
+      ['E', -1, 'maj',  '♭III'],
+      ['A', -1, 'maj',  '♭VI'],
+      ['D', -1, 'maj',  '♭II'],
+    ] as const)('%s%s %s → %s', (l, a, q, expected) => {
+      expect(chordDegreeLabel(mkDecl(l, a, q), C_MAJOR)).toBe(expected);
+    });
+  });
+
+  describe('C minor — diatonic triads', () => {
+    it.each([
+      ['C',  0,  'min', 'i'],
+      ['D',  0,  'dim', 'ii°'],
+      ['E', -1,  'maj', 'III'],
+      ['F',  0,  'min', 'iv'],
+      ['G',  0,  'maj', 'V'],
+      ['A', -1,  'maj', 'VI'],
+      ['B', -1,  'maj', 'VII'],
+    ] as const)('%s%s %s → %s', (l, a, q, expected) => {
+      expect(chordDegreeLabel(mkDecl(l, a, q), C_MINOR)).toBe(expected);
+    });
+  });
+
+  it('G major: D is V', () => expect(chordDegreeLabel(mkDecl('D', 0, 'maj'), G_MAJOR)).toBe('V'));
+  it('Eb major: Ab is IV', () => expect(chordDegreeLabel(mkDecl('A', -1, 'maj'), EB_MAJOR)).toBe('IV'));
+});
+
+// ── inferChordFromNotes ───────────────────────────────────────────────────────
+
+const ns = (midi: number, key: KeySignature = C_MAJOR): { spelledPitch: SpelledPitch } =>
+  ({ spelledPitch: spellMidi(midi, key) });
+
+describe('inferChordFromNotes', () => {
+  it('I — C major triad, root doubled (C E G C)', () => {
+    expect(inferChordFromNotes([ns(60), ns(64), ns(67), ns(72)], C_MAJOR))
+      .toEqual({ root: { letter: 'C', accidental: 0 }, quality: 'maj' });
+  });
+
+  it('I — C major triad in first inversion (E G C E) — root still C', () => {
+    expect(inferChordFromNotes([ns(64), ns(67), ns(72), ns(76)], C_MAJOR))
+      .toEqual({ root: { letter: 'C', accidental: 0 }, quality: 'maj' });
+  });
+
+  it('V7 — G dominant 7th (G B D F)', () => {
+    expect(inferChordFromNotes([ns(55), ns(59), ns(62), ns(65)], C_MAJOR))
+      .toEqual({ root: { letter: 'G', accidental: 0 }, quality: 'dom7' });
+  });
+
+  it('ii — D minor triad, root doubled (D F A D)', () => {
+    expect(inferChordFromNotes([ns(62), ns(65), ns(69), ns(74)], C_MAJOR))
+      .toEqual({ root: { letter: 'D', accidental: 0 }, quality: 'min' });
+  });
+
+  it('viiø7 — B half-diminished 7th (B D F A)', () => {
+    expect(inferChordFromNotes([ns(59), ns(62), ns(65), ns(69)], C_MAJOR))
+      .toEqual({ root: { letter: 'B', accidental: 0 }, quality: 'hdim7' });
+  });
+
+  it('i — C minor triad in C minor (C Eb G C)', () => {
+    expect(inferChordFromNotes([ns(60, C_MINOR), ns(63, C_MINOR), ns(67, C_MINOR), ns(72, C_MINOR)], C_MINOR))
+      .toEqual({ root: { letter: 'C', accidental: 0 }, quality: 'min' });
+  });
+
+  it('I — G major triad in G major (G B D G)', () => {
+    expect(inferChordFromNotes([ns(55, G_MAJOR), ns(59, G_MAJOR), ns(62, G_MAJOR), ns(67, G_MAJOR)], G_MAJOR))
+      .toEqual({ root: { letter: 'G', accidental: 0 }, quality: 'maj' });
+  });
+
+  it('returns null for non-diatonic chord (F# A C in C major)', () => {
+    const chromatic = [
+      { spelledPitch: { letter: 'F', accidental: 1, octave: 4 } as SpelledPitch },
+      { spelledPitch: { letter: 'A', accidental: 0, octave: 4 } as SpelledPitch },
+      { spelledPitch: { letter: 'C', accidental: 0, octave: 5 } as SpelledPitch },
+      { spelledPitch: { letter: 'F', accidental: 1, octave: 5 } as SpelledPitch },
+    ];
+    expect(inferChordFromNotes(chromatic, C_MAJOR)).toBeNull();
   });
 });
