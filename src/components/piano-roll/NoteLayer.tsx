@@ -3,7 +3,7 @@
 import type { Note, Composition } from '../../types/song';
 import { VOICE_COLORS } from '../../types/song';
 import { spelledPitchToMidi } from '../../lib/harmony';
-import type { SuggestionState, DragState } from '../../types/ui-state';
+import type { SuggestionState, DragState, AutocompleteNote } from '../../types/ui-state';
 import { MIN_PITCH, MAX_PITCH } from './layout';
 import NoteBlock, { type NoteVariant } from './NoteBlock';
 
@@ -13,11 +13,12 @@ interface NoteLayerProps {
   suggestion: SuggestionState;
   drag: DragState | null;
   cellW: number;
+  ghostNotes?: AutocompleteNote[];
 }
 
 type NoteEntry = { note: Note; variant: NoteVariant; color?: string };
 
-export default function NoteLayer({ composition, activeComposition, suggestion, drag, cellW }: NoteLayerProps) {
+export default function NoteLayer({ composition, activeComposition, suggestion, drag, cellW, ghostNotes = [] }: NoteLayerProps) {
   const allNotes = (c: Composition): NoteEntry[] =>
     c.voices.flatMap(v =>
       v.notes.map(note => ({
@@ -40,6 +41,15 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
         ]
       : allNotes(composition);
 
+  const ghostEntries: NoteEntry[] = ghostNotes.map((gn, i) => {
+    const voiceRole = composition.voices.find(v => v.id === gn.voiceId)?.role;
+    return {
+      note: { id: `ghost-${i}`, spelledPitch: gn.spelledPitch, startBeat: gn.startBeat, duration: gn.duration },
+      variant: 'ghost' as const,
+      color: voiceRole ? VOICE_COLORS[voiceRole] : undefined,
+    };
+  });
+
   const displayNotes: NoteEntry[] = drag
     ? [
         ...baseNotes.filter(({ note }) => note.id !== drag.noteId),
@@ -51,8 +61,9 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
           },
           variant: 'dragging' as const,
         },
+        ...ghostEntries,
       ]
-    : baseNotes;
+    : [...baseNotes, ...ghostEntries];
 
   // Derive voice color for suggestion diff notes
   const voiceColorForNote = (noteId: string): string | undefined => {
@@ -66,7 +77,7 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
         const midi = spelledPitchToMidi(note.spelledPitch);
         if (midi < MIN_PITCH || midi > MAX_PITCH) return null;
         const noteColor =
-          (variant === 'normal' || variant === 'dragging')
+          (variant === 'normal' || variant === 'dragging' || variant === 'ghost')
             ? (color ?? voiceColorForNote(note.id))
             : undefined;
         return (

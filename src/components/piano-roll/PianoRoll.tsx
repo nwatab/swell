@@ -8,10 +8,11 @@ import { useAgentSuggestion } from '../../hooks/useAgentSuggestion';
 import { useMusicGen } from '../../hooks/useMusicGen';
 import { useDiagnostics } from '../../hooks/useDiagnostics';
 import { useZoom } from '../../hooks/useZoom';
+import { useAutocomplete } from '../../hooks/useAutocomplete';
 import { toResolution } from '../../lib/snap';
 import type { SnapDiv } from '../../lib/snap';
 import type { ChordType } from '../../lib/music/chord';
-import { totalBeats, beatsPerMeasure } from '../../types/song';
+import { totalBeats, beatsPerMeasure, DURATION_BEATS } from '../../types/song';
 import { NUM_WHITE_KEYS, WHITE_H } from './layout';
 import TransportBar from '../transport/TransportBar';
 import TracksBar from '../streams/TracksBar';
@@ -36,6 +37,9 @@ export default function PianoRoll() {
   const [problemsOpen, setProblemsOpen] = useState(false);
 
   const { suggestion, handleAgentSubmit, handleAccept, handleReject } = useAgentSuggestion(composition, setComposition);
+  const { autocomplete, acceptAutocomplete, dismissAutocomplete } = useAutocomplete(
+    composition, setComposition, suggestion.status !== 'idle',
+  );
   const { musicGen, handleMusicGenToggle, handleMusicGen, closeMusicGen } = useMusicGen();
   const { cellW, zoomIn, zoomOut, canZoomIn, canZoomOut } = useZoom();
   const { diagnostics } = useDiagnostics(composition);
@@ -64,7 +68,10 @@ export default function PianoRoll() {
   const resolution = toResolution(snapDiv);
   const tb = totalBeats(composition);
   const bpm = beatsPerMeasure(composition);
-  const gridWidth = tb * cellW;
+  const ghostNotes = autocomplete.status === 'ready' && suggestion.status === 'idle' ? autocomplete.notes : [];
+  const maxGhostBeat = ghostNotes.reduce((max, n) => Math.max(max, n.startBeat + DURATION_BEATS[n.duration]), 0);
+  const displayTotalBeats = Math.max(tb, maxGhostBeat);
+  const gridWidth = displayTotalBeats * cellW;
   const gridHeight = NUM_WHITE_KEYS * WHITE_H;
 
   return (
@@ -103,7 +110,7 @@ export default function PianoRoll() {
         <Keyboard globalKey={composition.keySignature} scrollRef={keyboardRef} />
 
         <div className="flex-1 overflow-auto overscroll-none" onScroll={handleScroll}>
-          <BeatHeader totalBeats={tb} beatsPerMeasure={bpm} cellW={cellW} measures={composition.measures} />
+          <BeatHeader totalBeats={displayTotalBeats} beatsPerMeasure={bpm} cellW={cellW} measures={composition.measures} />
 
           <div
             ref={gridRef}
@@ -127,12 +134,22 @@ export default function PianoRoll() {
               suggestion={suggestion}
               drag={drag}
               cellW={cellW}
+              ghostNotes={ghostNotes}
             />
             {playing && <Playhead beat={playhead} cellW={cellW} />}
           </div>
         </div>
       </div>
 
+      {autocomplete.status === 'ready' && (
+        <div className="flex items-center gap-3 px-4 py-1.5 bg-zinc-800 border-t border-zinc-700 text-xs text-zinc-400">
+          <span className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse" />
+          <span>Tab to accept suggestion</span>
+          <span className="text-zinc-600">Esc to dismiss</span>
+          <button onClick={acceptAutocomplete} className="ml-auto px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Tab</button>
+          <button onClick={dismissAutocomplete} className="px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Esc</button>
+        </div>
+      )}
       <AgentBar
         suggestion={suggestion}
         onSubmit={handleAgentSubmit}

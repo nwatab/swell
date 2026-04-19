@@ -4,7 +4,7 @@ import type { Note } from '../../types/song';
 import { spelledPitchToString, spelledPitchToMidi } from '../../lib/harmony';
 import { noteBlockY, NOTE_H, isBlack } from './layout';
 
-export type NoteVariant = 'normal' | 'added' | 'removed' | 'dragging';
+export type NoteVariant = 'normal' | 'added' | 'removed' | 'dragging' | 'ghost';
 
 interface NoteBlockProps {
   note: Note;
@@ -18,6 +18,7 @@ export default function NoteBlock({ note, cellW, variant = 'normal', color = '#3
     variant === 'added'    ? { backgroundColor: '#10b981', borderColor: '#6ee7b7' } :
     variant === 'removed'  ? { backgroundColor: 'rgba(239,68,68,0.6)', borderColor: '#f87171', opacity: 0.7 } :
     variant === 'dragging' ? { backgroundColor: color, borderColor: color, opacity: 0.8 } :
+    variant === 'ghost'    ? { backgroundColor: color, borderColor: color, opacity: 0.35, borderStyle: 'dashed' } :
                              { backgroundColor: color, borderColor: color };
 
   const midi = spelledPitchToMidi(note.spelledPitch);

@@ -1,4 +1,4 @@
-import type { Composition, SpelledPitch } from './song';
+import type { Composition, SpelledPitch, NoteDuration } from './song';
 import type { NoteDiff } from '../lib/diff';
 
 export type { SnapDiv } from '../lib/snap';
@@ -18,6 +18,18 @@ export type DragState = {
   previewSpelledPitch: SpelledPitch;  // for rendering the drag preview
   hasMoved: boolean;
 };
+
+export type AutocompleteNote = {
+  voiceId: string;
+  spelledPitch: SpelledPitch;
+  startBeat: number;
+  duration: NoteDuration;
+};
+
+export type AutocompleteState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; notes: AutocompleteNote[] };
 
 export type MusicGenState =
   | { status: 'hidden' }
