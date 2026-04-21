@@ -55,13 +55,13 @@ export const pitchY = (pitch: number): number =>
 export const pitchBlockH = (pitch: number): number => (isBlack(pitch) ? BLACK_H : WHITE_H);
 
 // Uniform note block height (same for black and white keys)
-export const NOTE_H = WHITE_H - 4;
+export const NOTE_H = WHITE_H - 8;
 
 // Top y-coordinate for a note block, centered within its pitch row
 export const noteBlockY = (pitch: number): number =>
   isBlack(pitch)
     ? pitchY(pitch) + BLACK_H / 2 - NOTE_H / 2
-    : pitchY(pitch) + 2;
+    : pitchY(pitch) + 4;
 
 // Grid y-coordinate → MIDI pitch; black key bands take visual priority
 export const yToPitch = (y: number): number | null => {

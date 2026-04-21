@@ -48,6 +48,12 @@ export default function AgentBar({ suggestion, onSubmit, onAccept, onReject }: A
             <span className="inline-block w-3 h-3 rounded-sm bg-red-500/60" />
             Removed {suggestion.diff.removed.length}
           </span>
+          {suggestion.diff.modified.length > 0 && (
+            <span className="flex items-center gap-1 text-yellow-400">
+              <span className="inline-block w-3 h-3 rounded-sm bg-yellow-500/70" />
+              Modified {suggestion.diff.modified.length}
+            </span>
+          )}
           <div className="flex gap-2 ml-auto">
             <button
               onClick={onAccept}
