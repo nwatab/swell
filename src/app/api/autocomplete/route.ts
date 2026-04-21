@@ -101,7 +101,8 @@ export async function POST(req: NextRequest) {
 
     const validVoiceIds = new Set(composition.voices.map(v => v.id));
     const notes = (parsed as AutocompleteNote[]).filter(n => validVoiceIds.has(n.voiceId));
-    if (notes.length !== 4) {
+    const coveredVoiceIds = new Set(notes.map(n => n.voiceId));
+    if (notes.length !== 4 || coveredVoiceIds.size !== validVoiceIds.size) {
       return NextResponse.json({ error: 'Invalid voice IDs from model' }, { status: 500 });
     }
 
