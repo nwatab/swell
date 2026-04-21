@@ -11,7 +11,7 @@ export const CHORD_INTERVALS: Record<Exclude<ChordType, 'dia' | 'dia7'>, readonl
 };
 
 export const CHORD_LABELS: Record<ChordType, string> = {
-  note:  '—',
+  note:  '♩',
   maj:   'Maj',
   min:   'Min',
   maj7:  'Maj7',
