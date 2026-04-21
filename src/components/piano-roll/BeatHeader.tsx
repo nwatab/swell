@@ -11,9 +11,10 @@ interface BeatHeaderProps {
   cellW: number;
   measures: readonly HarmonicDeclaration[];
   keySignature: KeySignature;
+  ghostMeasureIndex?: number;
 }
 
-export default function BeatHeader({ totalBeats, beatsPerMeasure, cellW, measures, keySignature }: BeatHeaderProps) {
+export default function BeatHeader({ totalBeats, beatsPerMeasure, cellW, measures, keySignature, ghostMeasureIndex }: BeatHeaderProps) {
   const measureCount = Math.ceil(totalBeats / beatsPerMeasure);
   const measureW = beatsPerMeasure * cellW;
 
@@ -29,7 +30,10 @@ export default function BeatHeader({ totalBeats, beatsPerMeasure, cellW, measure
             <div
               key={i}
               style={{ width: measureW, flexShrink: 0 }}
-              className="flex items-center pl-2 border-r border-zinc-700 text-[10px] text-zinc-500 truncate"
+              className={[
+                'flex items-center pl-2 border-r border-zinc-700 text-[10px] truncate',
+                i === ghostMeasureIndex ? 'text-zinc-500 opacity-50' : 'text-zinc-500',
+              ].join(' ')}
             >
               {decl ? chordDegreeLabel(decl, keySignature) : ''}
             </div>
@@ -43,7 +47,10 @@ export default function BeatHeader({ totalBeats, beatsPerMeasure, cellW, measure
           <div
             key={i}
             style={{ width: measureW, flexShrink: 0 }}
-            className="flex items-center pl-2 border-r border-zinc-700 text-[11px] font-semibold text-indigo-300 truncate"
+            className={[
+              'flex items-center pl-2 border-r border-zinc-700 text-[11px] font-semibold text-indigo-300 truncate',
+              i === ghostMeasureIndex ? 'opacity-50' : '',
+            ].join(' ')}
           >
             {declByMeasure.has(i) ? chordLabel(declByMeasure.get(i)!) : ''}
           </div>
