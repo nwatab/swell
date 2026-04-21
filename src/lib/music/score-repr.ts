@@ -10,7 +10,7 @@
 
 import type { Composition, Voice, HarmonicDeclaration } from '../../types/song';
 import { VOICE_ORDER } from '../../types/song';
-import { spelledPitchToString } from '../harmony';
+import { spelledPitchToString, chordDegreeLabel } from '../harmony';
 
 const VOICE_ABBREV: Record<string, string> = {
   soprano: 'S',
@@ -19,9 +19,10 @@ const VOICE_ABBREV: Record<string, string> = {
   bass:    'B',
 };
 
-const pitchClassLabel = (decl: HarmonicDeclaration): string => {
+const pitchClassLabel = (decl: HarmonicDeclaration, key: Parameters<typeof chordDegreeLabel>[1]): string => {
   const acc = ['𝄫', '♭', '', '♯', '𝄪'][decl.root.accidental + 2];
-  return `${decl.root.letter}${acc}`;
+  const roman = chordDegreeLabel(decl, key);
+  return `${decl.root.letter}${acc} ${decl.quality} (${roman})`;
 };
 
 export const compositionToText = (composition: Composition): string => {
@@ -44,7 +45,7 @@ export const compositionToText = (composition: Composition): string => {
   for (let m = 0; m < measureCount; m++) {
     const measureStartBeat = m * beatsPerMeasure;
     const decl = measures.find(d => d.measureIndex === m);
-    const chordLabel = decl ? `[${pitchClassLabel(decl)} ${decl.quality}]` : '';
+    const chordLabel = decl ? `[${pitchClassLabel(decl, keySignature)}]` : '';
 
     // Collect notes starting in this measure, keyed by voice
     const voiceNotes = orderedVoices.map(v => {
