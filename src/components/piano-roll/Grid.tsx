@@ -36,7 +36,7 @@ export default function Grid({
       {PITCHES.map(pitch => {
         const deg = getScaleDegree(pitch, globalKey);
         const rowClass =
-          deg === 0   ? 'bg-zinc-700 border-zinc-600/40'
+          deg === 0   ? 'bg-zinc-500 border-zinc-400/40'
           : deg != null ? 'bg-zinc-800 border-zinc-700/40'
           :               'bg-zinc-950 border-zinc-800/20';
         return (
