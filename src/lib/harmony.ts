@@ -11,16 +11,18 @@
 import type {
   Composition,
   Note,
+  NoteDuration,
+  Voice,
   KeySignature,
   SpelledPitch,
   NoteLetter,
   Accidental,
   VoiceRole,
-  HarmonicDeclaration,
   ChordQuality,
   PitchClass,
 } from '../types/song';
 import { DURATION_BEATS } from '../types/song';
+import { chordLabel } from './music/chord';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -138,8 +140,8 @@ const DEGREE_QUALITY_SUFFIX: Record<ChordQuality, string> = {
  * Diatonic roots → "V7", "ii°", "IM7"; chromatic roots → "♭VII7", "♯IV°".
  * Prefers ♭ prefix over ♯ for chromatic roots (borrowed chords are more common).
  */
-export const chordDegreeLabel = (decl: HarmonicDeclaration, key: KeySignature): string => {
-  const pc = ((LETTER_SEMITONES[decl.root.letter] + decl.root.accidental) + 12) % 12;
+export const chordDegreeLabel = (chord: { root: PitchClass; quality: ChordQuality }, key: KeySignature): string => {
+  const pc = ((LETTER_SEMITONES[chord.root.letter] + chord.root.accidental) + 12) % 12;
   const rel = ((pc - rootPc(key)) + 12) % 12;
   const intervals = modeIntervals(key) as readonly number[];
 
@@ -153,12 +155,12 @@ export const chordDegreeLabel = (decl: HarmonicDeclaration, key: KeySignature): 
     const sharpDeg = intervals.indexOf(sharpTarget);
     if (flatDeg !== -1) { degIdx = flatDeg; accPrefix = '♭'; }
     else if (sharpDeg !== -1) { degIdx = sharpDeg; accPrefix = '♯'; }
-    else return `${decl.root.letter}${DEGREE_QUALITY_SUFFIX[decl.quality]}`; // fallback
+    else return `${chord.root.letter}${DEGREE_QUALITY_SUFFIX[chord.quality]}`; // fallback
   }
 
   const base = BASE_ROMANS[degIdx];
-  const cased = QUALITY_IS_MAJOR[decl.quality] ? base : base.toLowerCase();
-  return accPrefix + cased + DEGREE_QUALITY_SUFFIX[decl.quality];
+  const cased = QUALITY_IS_MAJOR[chord.quality] ? base : base.toLowerCase();
+  return accPrefix + cased + DEGREE_QUALITY_SUFFIX[chord.quality];
 };
 
 // ── Diatonic chord intervals ──────────────────────────────────────────────────
@@ -271,6 +273,44 @@ export const inferChordFromNotes = (
     }
   }
   return null;
+};
+
+// ── Per-beat chord display ────────────────────────────────────────────────────
+
+export interface BeatChordEntry {
+  readonly degree: string;  // '' | '?' | 'V7' | etc.
+  readonly chord: string;   // '' | '?' | 'Gm7' | etc.
+  readonly ghost: boolean;
+}
+
+/**
+ * Compute chord display entries for each beat.
+ * Every beat with sounding notes shows its chord label. Notes-absent beats → empty.
+ * Unrecognized combinations → '?'. Ghost notes are analyzed as a unit per measure.
+ */
+export const computeBeatChordEntries = (
+  voices: readonly Voice[],
+  ghostNotes: readonly { spelledPitch: SpelledPitch; startBeat: number; duration: NoteDuration }[],
+  ghostMeasureIndex: number,
+  totalBeats: number,
+  beatsPerMeasure: number,
+  key: KeySignature,
+): readonly BeatChordEntry[] => {
+  return Array.from({ length: Math.ceil(totalBeats) }, (_, beat) => {
+    const measureIdx = Math.floor(beat / beatsPerMeasure);
+    const inGhostMeasure = ghostMeasureIndex >= 0 && measureIdx === ghostMeasureIndex;
+
+    const voiceNotes = voices.flatMap(v => v.notes.filter(n => n.startBeat === beat));
+    const gNotes = inGhostMeasure ? ghostNotes.filter(n => n.startBeat === beat) : [];
+    const notes = [...voiceNotes, ...gNotes];
+
+    if (notes.length === 0) return { degree: '', chord: '', ghost: false };
+
+    const ghost = gNotes.length > 0;
+    const inferred = inferChordFromNotes(notes, key);
+    if (!inferred) return { degree: '?', chord: '?', ghost };
+    return { degree: chordDegreeLabel(inferred, key), chord: chordLabel(inferred), ghost };
+  });
 };
 
 // ── Key transform ─────────────────────────────────────────────────────────────

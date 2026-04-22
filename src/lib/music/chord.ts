@@ -1,4 +1,4 @@
-import type { HarmonicDeclaration, PitchClass, ChordQuality } from '../../types/song';
+import type { PitchClass, ChordQuality } from '../../types/song';
 
 export type ChordType = 'note' | 'maj' | 'min' | 'maj7' | 'min7' | 'dia' | 'dia7';
 
@@ -41,5 +41,5 @@ const QUALITY_SUFFIX: Record<ChordQuality, string> = {
 export const pitchClassLabel = (pc: PitchClass): string =>
   pc.letter + (ACCIDENTAL_SYMBOL[String(pc.accidental)] ?? '');
 
-export const chordLabel = (decl: HarmonicDeclaration): string =>
-  pitchClassLabel(decl.root) + QUALITY_SUFFIX[decl.quality];
+export const chordLabel = (chord: { root: PitchClass; quality: ChordQuality }): string =>
+  pitchClassLabel(chord.root) + QUALITY_SUFFIX[chord.quality];

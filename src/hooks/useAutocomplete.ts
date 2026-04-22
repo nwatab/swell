@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Composition } from '../types/song';
 import { beatsPerMeasure, DURATION_BEATS } from '../types/song';
 import type { AutocompleteState, AutocompleteNote } from '../types/ui-state';
-import { addNote, upsertHarmonicDeclaration } from '../lib/music/note-operations';
-import { inferChordFromNotes } from '../lib/harmony';
+import { addNote } from '../lib/music/note-operations';
 
 export type UseAutocompleteReturn = {
   autocomplete: AutocompleteState;
@@ -68,12 +67,6 @@ export const useAutocomplete = (
         : comp;
       for (const gn of notes) {
         updated = addNote(updated, gn.voiceId, gn.spelledPitch, gn.startBeat, gn.duration);
-      }
-      const startBeat = Math.min(...notes.map(n => n.startBeat));
-      const measureIndex = Math.floor(startBeat / bpm);
-      const inferred = inferChordFromNotes(notes, comp.keySignature);
-      if (inferred) {
-        updated = upsertHarmonicDeclaration(updated, { measureIndex, ...inferred });
       }
       return updated;
     });

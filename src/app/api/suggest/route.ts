@@ -35,8 +35,7 @@ The composition format:
         }
       ]
     }
-  ],
-  "measures": [ { "measureIndex": number, "root": { "letter": ..., "accidental": ... }, "quality": string } ]
+  ]
 }
 
 Rules:

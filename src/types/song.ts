@@ -63,18 +63,6 @@ export type ChordQuality =
   | 'hdim7'  // half-diminished 7th  [0, 3, 6, 10]  — iiø7
   | 'dim7';  // fully diminished 7th [0, 3, 6,  9]  — vii°7
 
-// ── Harmonic declaration (宣言層) ─────────────────────────────────────────────
-
-/**
- * Declares the chord intent for a measure. One per measure.
- * Inversion is not stored — it is derived from the Bass voice's lowest note.
- */
-export interface HarmonicDeclaration {
-  readonly measureIndex: number;
-  readonly root: PitchClass;
-  readonly quality: ChordQuality;
-}
-
 // ── Note (実現層) ─────────────────────────────────────────────────────────────
 
 export type NoteRole = 'root' | 'third' | 'fifth' | 'seventh' | 'ninth';
@@ -123,8 +111,6 @@ export interface Composition {
   readonly measureCount: number;
   /** Fixed SATB voices. Always 4 voices in MVP. */
   readonly voices: readonly Voice[];
-  /** Harmonic declarations — one per measure. */
-  readonly measures: readonly HarmonicDeclaration[];
 }
 
 /** Total beats derived from measure count and time signature. */
@@ -142,5 +128,4 @@ export const DEFAULT_COMPOSITION: Composition = {
   bpm: 120,
   measureCount: 8,
   voices: [...VOICE_ORDER].reverse().map(role => ({ id: genId(), role, notes: [] })),
-  measures: [],
 };

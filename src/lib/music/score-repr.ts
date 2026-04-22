@@ -4,13 +4,14 @@
  *
  * Format example:
  *   Key: C major | 120 BPM | 4/4 | 8 bars
- *   m1 [I maj]:  S=E4  A=C4  T=G3  B=C3
- *   m2 [V dom7]: S=D5  A=B4  T=G3  B=G2
+ *   m1 [C maj (I)]:  S=E4  A=C4  T=G3  B=C3
+ *   m2 [G dom7 (V7)]: S=D5  A=B4  T=G3  B=G2
  */
 
-import type { Composition, Voice, HarmonicDeclaration } from '../../types/song';
+import type { Composition, Voice } from '../../types/song';
 import { VOICE_ORDER } from '../../types/song';
-import { spelledPitchToString, chordDegreeLabel } from '../harmony';
+import { spelledPitchToString, chordDegreeLabel, inferChordFromNotes } from '../harmony';
+import { pitchClassLabel } from './chord';
 
 const VOICE_ABBREV: Record<string, string> = {
   soprano: 'S',
@@ -19,14 +20,8 @@ const VOICE_ABBREV: Record<string, string> = {
   bass:    'B',
 };
 
-const pitchClassLabel = (decl: HarmonicDeclaration, key: Parameters<typeof chordDegreeLabel>[1]): string => {
-  const acc = ['𝄫', '♭', '', '♯', '𝄪'][decl.root.accidental + 2];
-  const roman = chordDegreeLabel(decl, key);
-  return `${decl.root.letter}${acc} ${decl.quality} (${roman})`;
-};
-
 export const compositionToText = (composition: Composition): string => {
-  const { bpm, keySignature, timeSignature, measureCount, voices, measures } = composition;
+  const { bpm, keySignature, timeSignature, measureCount, voices } = composition;
   const acc = ['𝄫', '♭', '', '♯', '𝄪'][keySignature.tonic.accidental + 2];
   const keyLabel = `${keySignature.tonic.letter}${acc} ${keySignature.mode}`;
 
@@ -34,7 +29,6 @@ export const compositionToText = (composition: Composition): string => {
     `Key: ${keyLabel} | ${bpm} BPM | ${timeSignature.numerator}/${timeSignature.denominator} | ${measureCount} bars`,
   ];
 
-  // Voice order for display: soprano first
   const displayOrder = [...VOICE_ORDER].reverse();
   const orderedVoices = displayOrder
     .map(role => voices.find(v => v.role === role))
@@ -44,10 +38,7 @@ export const compositionToText = (composition: Composition): string => {
 
   for (let m = 0; m < measureCount; m++) {
     const measureStartBeat = m * beatsPerMeasure;
-    const decl = measures.find(d => d.measureIndex === m);
-    const chordLabel = decl ? `[${pitchClassLabel(decl, keySignature)}]` : '';
 
-    // Collect notes starting in this measure, keyed by voice
     const voiceNotes = orderedVoices.map(v => {
       const notes = v.notes
         .filter(n => n.startBeat >= measureStartBeat && n.startBeat < measureStartBeat + beatsPerMeasure)
@@ -56,7 +47,13 @@ export const compositionToText = (composition: Composition): string => {
     });
 
     const hasNotes = voiceNotes.some(vn => vn.notes.length > 0);
-    if (!hasNotes && !decl) continue;
+    if (!hasNotes) continue;
+
+    const allMeasureNotes = voiceNotes.flatMap(vn => vn.notes);
+    const inferred = inferChordFromNotes(allMeasureNotes, keySignature);
+    const chordStr = inferred
+      ? `[${pitchClassLabel(inferred.root)} ${inferred.quality} (${chordDegreeLabel(inferred, keySignature)})]`
+      : '';
 
     const noteStr = voiceNotes
       .filter(vn => vn.notes.length > 0)
@@ -66,8 +63,8 @@ export const compositionToText = (composition: Composition): string => {
       })
       .join('  ');
 
-    const prefix = `m${m + 1}${chordLabel ? ` ${chordLabel}` : ''}:`;
-    lines.push(`${prefix.padEnd(18)}${noteStr || '(empty)'}`);
+    const prefix = `m${m + 1}${chordStr ? ` ${chordStr}` : ''}:`;
+    lines.push(`${prefix.padEnd(18)}${noteStr}`);
   }
 
   if (lines.length === 1) lines.push('(no notes)');

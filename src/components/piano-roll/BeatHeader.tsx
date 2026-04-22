@@ -1,41 +1,32 @@
 'use client';
 
-import type { HarmonicDeclaration, KeySignature } from '../../types/song';
-import { chordLabel } from '../../lib/music/chord';
-import { chordDegreeLabel } from '../../lib/harmony';
+import type { BeatChordEntry } from '../../lib/harmony';
 import { HEADER_H, CHORD_HEADER_H, DEGREE_HEADER_H } from './layout';
 
 interface BeatHeaderProps {
   totalBeats: number;
   beatsPerMeasure: number;
   cellW: number;
-  measures: readonly HarmonicDeclaration[];
-  keySignature: KeySignature;
-  ghostMeasureIndex?: number;
+  beatChords: readonly BeatChordEntry[];
 }
 
-export default function BeatHeader({ totalBeats, beatsPerMeasure, cellW, measures, keySignature, ghostMeasureIndex }: BeatHeaderProps) {
-  const measureCount = Math.ceil(totalBeats / beatsPerMeasure);
-  const measureW = beatsPerMeasure * cellW;
-
-  const declByMeasure = new Map(measures.map(m => [m.measureIndex, m]));
-
+export default function BeatHeader({ totalBeats, beatsPerMeasure, cellW, beatChords }: BeatHeaderProps) {
   return (
     <div className="sticky top-0 z-10 bg-zinc-800 border-b border-zinc-600" style={{ width: totalBeats * cellW }}>
       {/* Degree label row */}
       <div className="flex" style={{ height: DEGREE_HEADER_H }}>
-        {Array.from({ length: measureCount }, (_, i) => {
-          const decl = declByMeasure.get(i);
+        {Array.from({ length: totalBeats }, (_, i) => {
+          const entry = beatChords[i] ?? { degree: '', chord: '', ghost: false };
           return (
             <div
               key={i}
-              style={{ width: measureW, flexShrink: 0 }}
+              style={{ width: cellW, flexShrink: 0 }}
               className={[
-                'flex items-center pl-2 border-r border-zinc-700 text-[10px] truncate',
-                i === ghostMeasureIndex ? 'text-zinc-500 opacity-50' : 'text-zinc-500',
+                'flex items-center pl-1 border-r border-zinc-700 text-[10px] truncate text-zinc-500',
+                entry.ghost ? 'opacity-50' : '',
               ].join(' ')}
             >
-              {decl ? chordDegreeLabel(decl, keySignature) : ''}
+              {entry.degree}
             </div>
           );
         })}
@@ -43,18 +34,21 @@ export default function BeatHeader({ totalBeats, beatsPerMeasure, cellW, measure
 
       {/* Chord name row */}
       <div className="flex" style={{ height: CHORD_HEADER_H }}>
-        {Array.from({ length: measureCount }, (_, i) => (
-          <div
-            key={i}
-            style={{ width: measureW, flexShrink: 0 }}
-            className={[
-              'flex items-center pl-2 border-r border-zinc-700 text-[11px] font-semibold text-indigo-300 truncate',
-              i === ghostMeasureIndex ? 'opacity-50' : '',
-            ].join(' ')}
-          >
-            {declByMeasure.has(i) ? chordLabel(declByMeasure.get(i)!) : ''}
-          </div>
-        ))}
+        {Array.from({ length: totalBeats }, (_, i) => {
+          const entry = beatChords[i] ?? { degree: '', chord: '', ghost: false };
+          return (
+            <div
+              key={i}
+              style={{ width: cellW, flexShrink: 0 }}
+              className={[
+                'flex items-center pl-1 border-r border-zinc-700 text-[11px] font-semibold text-indigo-300 truncate',
+                entry.ghost ? 'opacity-50' : '',
+              ].join(' ')}
+            >
+              {entry.chord}
+            </div>
+          );
+        })}
       </div>
 
       {/* Beat number row */}

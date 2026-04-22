@@ -10,8 +10,9 @@ import {
   analyzeHarmony,
   chordDegreeLabel,
   inferChordFromNotes,
+  computeBeatChordEntries,
 } from './harmony';
-import type { KeySignature, Note, Composition, Voice, SpelledPitch, HarmonicDeclaration } from '../types/song';
+import type { KeySignature, Note, Composition, Voice, SpelledPitch, ChordQuality, PitchClass } from '../types/song';
 import { DEFAULT_COMPOSITION } from '../types/song';
 import { genId } from './id';
 
@@ -319,8 +320,8 @@ describe('analyzeHarmony — voice crossing', () => {
 
 // ── chordDegreeLabel ──────────────────────────────────────────────────────────
 
-const mkDecl = (letter: string, accidental: number, quality: string): HarmonicDeclaration =>
-  ({ measureIndex: 0, root: { letter, accidental }, quality } as HarmonicDeclaration);
+const mkDecl = (letter: string, accidental: number, quality: string): { root: PitchClass; quality: ChordQuality } =>
+  ({ root: { letter, accidental } as PitchClass, quality: quality as ChordQuality });
 
 describe('chordDegreeLabel', () => {
   describe('C major — diatonic triads', () => {
@@ -428,5 +429,127 @@ describe('inferChordFromNotes', () => {
       { spelledPitch: { letter: 'F', accidental: 1, octave: 5 } as SpelledPitch },
     ];
     expect(inferChordFromNotes(chromatic, C_MAJOR)).toBeNull();
+  });
+});
+
+// ── chordDegreeLabel ──────────────────────────────────────────────────────────
+
+describe('chordDegreeLabel (second suite)', () => {
+  const decl = (letter: PitchClass['letter'], acc: PitchClass['accidental'], quality: ChordQuality): { root: PitchClass; quality: ChordQuality } =>
+    ({ root: { letter, accidental: acc }, quality });
+
+  it('I — C major in C major', () => {
+    expect(chordDegreeLabel(decl('C', 0, 'maj'), C_MAJOR)).toBe('I');
+  });
+
+  it('ii — D minor in C major', () => {
+    expect(chordDegreeLabel(decl('D', 0, 'min'), C_MAJOR)).toBe('ii');
+  });
+
+  it('V7 — G dominant 7th in C major', () => {
+    expect(chordDegreeLabel(decl('G', 0, 'dom7'), C_MAJOR)).toBe('V7');
+  });
+
+  it('vii° — B diminished in C major', () => {
+    expect(chordDegreeLabel(decl('B', 0, 'dim'), C_MAJOR)).toBe('vii°');
+  });
+
+  it('♭VII — Bb major in C major (borrowed)', () => {
+    expect(chordDegreeLabel(decl('B', -1, 'maj'), C_MAJOR)).toBe('♭VII');
+  });
+
+  it('iv — F minor in C major (borrowed)', () => {
+    expect(chordDegreeLabel(decl('F', 0, 'min'), C_MAJOR)).toBe('iv');
+  });
+
+  it('i — C minor in C minor', () => {
+    expect(chordDegreeLabel(decl('C', 0, 'min'), C_MINOR)).toBe('i');
+  });
+
+  it('V — G major in C minor (harmonic V)', () => {
+    expect(chordDegreeLabel(decl('G', 0, 'maj'), C_MINOR)).toBe('V');
+  });
+
+  it('IVmaj7 — F major 7th in C major', () => {
+    expect(chordDegreeLabel(decl('F', 0, 'maj7'), C_MAJOR)).toBe('IVM7');
+  });
+
+  it('II — D major in C major (secondary dominant root)', () => {
+    expect(chordDegreeLabel(decl('D', 0, 'maj'), C_MAJOR)).toBe('II');
+  });
+});
+
+// ── computeBeatChordEntries ───────────────────────────────────────────────────
+
+describe('computeBeatChordEntries', () => {
+  const mkNote = (midi: number, start: number, duration: Note['duration'] = 'quarter'): Note => ({
+    id: genId(),
+    spelledPitch: spellMidi(midi, C_MAJOR),
+    startBeat: start,
+    duration,
+  });
+
+  const soprano = (notes: Note[]): Voice => makeVoice('soprano', notes);
+  const alto    = (notes: Note[]): Voice => makeVoice('alto', notes);
+  const tenor   = (notes: Note[]): Voice => makeVoice('tenor', notes);
+  const bass    = (notes: Note[]): Voice => makeVoice('bass', notes);
+
+  it('empty voices → all entries empty', () => {
+    const entries = computeBeatChordEntries([], [], -1, 4, 4, C_MAJOR);
+    expect(entries.every(e => e.degree === '' && e.chord === '')).toBe(true);
+  });
+
+  it('C major triad whole note shows I / C only on beat 0 (startBeat)', () => {
+    const voices = [
+      soprano([mkNote(64, 0, 'whole')]),
+      alto   ([mkNote(60, 0, 'whole')]),
+      tenor  ([mkNote(67, 0, 'whole')]),
+    ];
+    const entries = computeBeatChordEntries(voices, [], -1, 4, 4, C_MAJOR);
+    expect(entries[0]).toMatchObject({ degree: 'I', chord: 'C' });
+    expect(entries[1]).toMatchObject({ degree: '', chord: '' });
+    expect(entries[2]).toMatchObject({ degree: '', chord: '' });
+    expect(entries[3]).toMatchObject({ degree: '', chord: '' });
+  });
+
+  it('chord change mid-measure: I at beat 0, V at beat 2', () => {
+    // C major (C4=60, E4=64, G4=67) → G major (G3=55, B3=59, D4=62)
+    const voices = [
+      soprano([mkNote(64, 0, 'half'), mkNote(62, 2, 'half')]),
+      alto   ([mkNote(60, 0, 'half'), mkNote(59, 2, 'half')]),
+      tenor  ([mkNote(67, 0, 'half'), mkNote(55, 2, 'half')]),
+    ];
+    const entries = computeBeatChordEntries(voices, [], -1, 4, 4, C_MAJOR);
+    expect(entries[0]).toMatchObject({ degree: 'I',  chord: 'C' });
+    expect(entries[1]).toMatchObject({ degree: '',   chord: '' });
+    expect(entries[2]).toMatchObject({ degree: 'V',  chord: 'G' });
+    expect(entries[3]).toMatchObject({ degree: '',   chord: '' });
+  });
+
+  it('unrecognized notes show ? on onset only', () => {
+    const voices = [
+      bass([
+        { id: genId(), spelledPitch: { letter: 'F', accidental: 1, octave: 3 }, startBeat: 0, duration: 'whole' },
+      ]),
+      tenor([
+        { id: genId(), spelledPitch: { letter: 'A', accidental: 0, octave: 3 }, startBeat: 0, duration: 'whole' },
+      ]),
+    ];
+    const entries = computeBeatChordEntries(voices, [], -1, 4, 4, C_MAJOR);
+    expect(entries[0]).toMatchObject({ degree: '?', chord: '?' });
+    expect(entries[1]).toMatchObject({ degree: '', chord: '' });
+  });
+
+  it('beats before notes start are empty', () => {
+    // chord starts at beat 2; beats 0 and 1 have no notes → empty
+    const voices = [
+      soprano([mkNote(64, 2, 'half')]),
+      alto   ([mkNote(60, 2, 'half')]),
+      tenor  ([mkNote(67, 2, 'half')]),
+    ];
+    const entries = computeBeatChordEntries(voices, [], -1, 4, 4, C_MAJOR);
+    expect(entries[0]).toMatchObject({ degree: '', chord: '' });
+    expect(entries[1]).toMatchObject({ degree: '', chord: '' });
+    expect(entries[2]).toMatchObject({ degree: 'I', chord: 'C' });
   });
 });

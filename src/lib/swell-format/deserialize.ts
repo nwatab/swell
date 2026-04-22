@@ -57,8 +57,6 @@ export const validateComposition = (raw: unknown): string | null => {
     }
   }
 
-  if (!Array.isArray(d.measures)) return 'measures must be an array';
-
   return null;
 };
 

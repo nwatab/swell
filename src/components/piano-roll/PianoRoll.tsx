@@ -13,8 +13,7 @@ import { toResolution } from '../../lib/snap';
 import type { SnapDiv } from '../../lib/snap';
 import type { ChordType } from '../../lib/music/chord';
 import { totalBeats, beatsPerMeasure, DURATION_BEATS } from '../../types/song';
-import type { HarmonicDeclaration } from '../../types/song';
-import { inferChordFromNotes } from '../../lib/harmony';
+import { computeBeatChordEntries } from '../../lib/harmony';
 import { NUM_WHITE_KEYS, WHITE_H } from './layout';
 import TransportBar from '../transport/TransportBar';
 import TracksBar from '../streams/TracksBar';
@@ -74,12 +73,15 @@ export default function PianoRoll() {
   const maxGhostBeat = ghostNotes.reduce((max, n) => Math.max(max, n.startBeat + DURATION_BEATS[n.duration]), 0);
   const displayTotalBeats = Math.max(tb, maxGhostBeat);
 
-  const ghostInferred = ghostNotes.length > 0 ? inferChordFromNotes(ghostNotes, composition.keySignature) : null;
   const ghostMeasureIndex = ghostNotes.length > 0 ? Math.floor(Math.min(...ghostNotes.map(n => n.startBeat)) / bpm) : -1;
-  const ghostDecl: HarmonicDeclaration | null = ghostInferred ? { measureIndex: ghostMeasureIndex, ...ghostInferred } : null;
-  const displayMeasures = ghostDecl
-    ? [...composition.measures.filter(m => m.measureIndex !== ghostMeasureIndex), ghostDecl]
-    : composition.measures;
+  const beatChords = computeBeatChordEntries(
+    activeComposition.voices,
+    ghostNotes,
+    ghostMeasureIndex,
+    displayTotalBeats,
+    bpm,
+    composition.keySignature,
+  );
   const gridWidth = displayTotalBeats * cellW;
   const gridHeight = NUM_WHITE_KEYS * WHITE_H;
 
@@ -119,7 +121,7 @@ export default function PianoRoll() {
         <Keyboard globalKey={composition.keySignature} scrollRef={keyboardRef} />
 
         <div className="flex-1 overflow-auto overscroll-none" onScroll={handleScroll}>
-          <BeatHeader totalBeats={displayTotalBeats} beatsPerMeasure={bpm} cellW={cellW} measures={displayMeasures} ghostMeasureIndex={ghostDecl ? ghostMeasureIndex : undefined} keySignature={composition.keySignature} />
+          <BeatHeader totalBeats={displayTotalBeats} beatsPerMeasure={bpm} cellW={cellW} beatChords={beatChords} />
 
           <div
             ref={gridRef}
