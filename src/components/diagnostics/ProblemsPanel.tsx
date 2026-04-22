@@ -66,8 +66,12 @@ export default function ProblemsPanel({ diagnostics, open, onToggle }: ProblemsP
                 <span className={`flex-shrink-0 mt-px ${SEVERITY_COLOR[d.severity]}`}>
                   {SEVERITY_ICON[d.severity]}
                 </span>
-                <span className="text-zinc-300 flex-1">{d.message}</span>
-                <span className="flex-shrink-0 text-zinc-600 font-mono">beat {d.beat + 1}</span>
+                <span className="flex-1">
+                  <span className="text-zinc-300">{d.message}</span>
+                  {d.detail && (
+                    <span className="block text-zinc-500 font-mono mt-0.5">{d.detail}</span>
+                  )}
+                </span>
               </div>
             ))
           )}

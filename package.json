@@ -36,6 +36,7 @@
     "jest": "^30.3.0",
     "lint-staged": "^16.4.0",
     "tailwindcss": "^4",
+    "ts-jest": "^29.4.9",
     "typescript": "^5"
   }
 }

@@ -459,6 +459,8 @@ export interface Diagnostic {
   readonly severity: DiagnosticSeverity;
   readonly type: DiagnosticType;
   readonly message: string;
+  /** Secondary line: pitch movement and interval details (shown below message in UI). */
+  readonly detail?: string;
   /** IDs of the note(s) that triggered this diagnostic. */
   readonly noteIds: readonly string[];
   /** Beat where the issue occurs (0-indexed). */
@@ -536,6 +538,9 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
     ]),
   );
 
+  const voiceIdToRole = new Map<string, VoiceRole>(activeVoices.map(v => [v.id, v.role]));
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
   // Order voices low → high by SATB role
   const orderedVoiceIds = [...activeVoices]
     .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role))
@@ -564,7 +569,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
         diags.push({
           severity: 'warning',
           type: 'range-violation',
-          message: `${v.role} ${spelledPitchToString(note.spelledPitch)} is too ${dir} for the ${v.role} range`,
+          message: `Out of range — ${cap(v.role)}, beat ${note.startBeat + 1}`,
+          detail: `${spelledPitchToString(note.spelledPitch)} is too ${dir} for ${v.role} range`,
           noteIds: [note.id],
           beat: note.startBeat,
         });
@@ -573,7 +579,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
   }
 
   // ── 2. Augmented melodic intervals ────────────────────────────────────────
-  for (const notes of voiceTimelines.values()) {
+  for (const [vid, notes] of voiceTimelines) {
+    const role = cap(voiceIdToRole.get(vid)!);
     for (let i = 1; i < notes.length; i++) {
       const prev = notes[i - 1];
       const curr = notes[i];
@@ -581,7 +588,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
         diags.push({
           severity: 'warning',
           type: 'augmented-melodic-interval',
-          message: `Augmented/tritone melodic interval ${spelledPitchToString(prev.spelledPitch)}→${spelledPitchToString(curr.spelledPitch)} at beat ${curr.startBeat + 1}`,
+          message: `Aug. interval — ${role}, beat ${prev.startBeat + 1}→${curr.startBeat + 1}`,
+          detail: `${spelledPitchToString(prev.spelledPitch)}→${spelledPitchToString(curr.spelledPitch)}`,
           noteIds: [prev.id, curr.id],
           beat: curr.startBeat,
         });
@@ -590,7 +598,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
   }
 
   // ── 3. Leading tone descent ────────────────────────────────────────────────
-  for (const notes of voiceTimelines.values()) {
+  for (const [vid, notes] of voiceTimelines) {
+    const role = cap(voiceIdToRole.get(vid)!);
     for (let i = 1; i < notes.length; i++) {
       const prev = notes[i - 1];
       const curr = notes[i];
@@ -608,7 +617,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
       diags.push({
         severity: 'warning',
         type: 'leading-tone-descent',
-        message: `Leading tone ${spelledPitchToString(prev.spelledPitch)} resolves downward at beat ${curr.startBeat + 1} (should rise to tonic)`,
+        message: `Leading tone descent — ${role}, beat ${prev.startBeat + 1}→${curr.startBeat + 1}`,
+        detail: `${spelledPitchToString(prev.spelledPitch)}→${spelledPitchToString(curr.spelledPitch)} (should rise to tonic)`,
         noteIds: [prev.id, curr.id],
         beat: curr.startBeat,
       });
@@ -657,6 +667,9 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
           n => n.startBeat <= currBeat && currBeat < n.startBeat + DURATION_BEATS[n.duration],
         );
 
+        const roleA = cap(voiceIdToRole.get(noteVoiceId.get(a.id)!)!);
+        const roleB = cap(voiceIdToRole.get(noteVoiceId.get(b.id)!)!);
+
         for (const ap of succsA) {
           for (const bp of succsB) {
             if (ap.id === bp.id) continue;
@@ -675,7 +688,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
                 diags.push({
                   severity: 'error',
                   type: 'parallel-fifth',
-                  message: `Parallel 5ths at beat ${currBeat + 1}`,
+                  message: `Parallel 5ths — ${roleA} × ${roleB}, beat ${prevBeat + 1}→${currBeat + 1}`,
+                  detail: `${spelledPitchToString(a.spelledPitch)}→${spelledPitchToString(ap.spelledPitch)}  ‖  ${spelledPitchToString(b.spelledPitch)}→${spelledPitchToString(bp.spelledPitch)}  (P5→P5)`,
                   noteIds: [ap.id, bp.id],
                   beat: currBeat,
                 });
@@ -689,7 +703,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
                 diags.push({
                   severity: 'error',
                   type: 'parallel-octave',
-                  message: `Parallel octaves at beat ${currBeat + 1}`,
+                  message: `Parallel octaves — ${roleA} × ${roleB}, beat ${prevBeat + 1}→${currBeat + 1}`,
+                  detail: `${spelledPitchToString(a.spelledPitch)}→${spelledPitchToString(ap.spelledPitch)}  ‖  ${spelledPitchToString(b.spelledPitch)}→${spelledPitchToString(bp.spelledPitch)}  (P8→P8)`,
                   noteIds: [ap.id, bp.id],
                   beat: currBeat,
                 });
@@ -705,6 +720,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
   {
     const outerLowId  = orderedVoiceIds[0];
     const outerHighId = orderedVoiceIds[orderedVoiceIds.length - 1];
+    const outerLowRole  = cap(voiceIdToRole.get(outerLowId)!);
+    const outerHighRole = cap(voiceIdToRole.get(outerHighId)!);
     for (let i = 1; i < snapshots.length; i++) {
       const prev = snapshots[i - 1];
       const curr = snapshots[i];
@@ -725,11 +742,14 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
       const upperMotion = cA > cB ? motionA : motionB;
       if (Math.abs(upperMotion) <= 2) continue;
 
+      const pitchDetail = `${spelledPitchToString(prev.map.get(outerLowId)!.spelledPitch)}→${spelledPitchToString(curr.map.get(outerLowId)!.spelledPitch)}  ‖  ${spelledPitchToString(prev.map.get(outerHighId)!.spelledPitch)}→${spelledPitchToString(curr.map.get(outerHighId)!.spelledPitch)}`;
+
       if (intervalCurr % 12 === 7) {
         diags.push({
           severity: 'error',
           type: 'hidden-fifth',
-          message: `Hidden 5th between outer voices at beat ${curr.beat + 1} (upper voice leaps to perfect 5th)`,
+          message: `Hidden 5th — ${outerHighRole} × ${outerLowRole}, beat ${prev.beat + 1}→${curr.beat + 1}`,
+          detail: `${pitchDetail}  (similar motion to P5)`,
           noteIds: [curr.map.get(outerLowId)!.id, curr.map.get(outerHighId)!.id],
           beat: curr.beat,
         });
@@ -737,7 +757,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
         diags.push({
           severity: 'error',
           type: 'hidden-octave',
-          message: `Hidden octave between outer voices at beat ${curr.beat + 1} (upper voice leaps to octave)`,
+          message: `Hidden octave — ${outerHighRole} × ${outerLowRole}, beat ${prev.beat + 1}→${curr.beat + 1}`,
+          detail: `${pitchDetail}  (similar motion to P8)`,
           noteIds: [curr.map.get(outerLowId)!.id, curr.map.get(outerHighId)!.id],
           beat: curr.beat,
         });
@@ -754,10 +775,13 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
       const nUpper = map.get(upper);
       if (!nLower || !nUpper) continue;
       if (spelledPitchToMidi(nLower.spelledPitch) > spelledPitchToMidi(nUpper.spelledPitch)) {
+        const lowerRole = cap(voiceIdToRole.get(lower)!);
+        const upperRole = cap(voiceIdToRole.get(upper)!);
         diags.push({
           severity: 'warning',
           type: 'voice-crossing',
-          message: `Voice crossing at beat ${beat + 1}`,
+          message: `Voice crossing — ${lowerRole} above ${upperRole}, beat ${beat + 1}`,
+          detail: `${lowerRole}: ${spelledPitchToString(nLower.spelledPitch)}  ${upperRole}: ${spelledPitchToString(nUpper.spelledPitch)}`,
           noteIds: [nLower.id, nUpper.id],
           beat,
         });
@@ -776,13 +800,16 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
       const prevUpper = prev.map.get(upperId);
       const currLower = curr.map.get(lowerId);
       const currUpper = curr.map.get(upperId);
+      const lowerRole = cap(voiceIdToRole.get(lowerId)!);
+      const upperRole = cap(voiceIdToRole.get(upperId)!);
 
       if (prevUpper && currLower &&
           spelledPitchToMidi(currLower.spelledPitch) > spelledPitchToMidi(prevUpper.spelledPitch)) {
         diags.push({
           severity: 'warning',
           type: 'voice-overlap',
-          message: `Voice overlap at beat ${curr.beat + 1}: lower voice crosses above adjacent voice's previous position`,
+          message: `Voice overlap — ${lowerRole} × ${upperRole}, beat ${prev.beat + 1}→${curr.beat + 1}`,
+          detail: `${lowerRole}: →${spelledPitchToString(currLower.spelledPitch)}  above prev ${upperRole}: ${spelledPitchToString(prevUpper.spelledPitch)}`,
           noteIds: [currLower.id, prevUpper.id],
           beat: curr.beat,
         });
@@ -792,7 +819,8 @@ export const analyzeHarmony = (song: Composition): readonly Diagnostic[] => {
         diags.push({
           severity: 'warning',
           type: 'voice-overlap',
-          message: `Voice overlap at beat ${curr.beat + 1}: upper voice crosses below adjacent voice's previous position`,
+          message: `Voice overlap — ${upperRole} × ${lowerRole}, beat ${prev.beat + 1}→${curr.beat + 1}`,
+          detail: `${upperRole}: →${spelledPitchToString(currUpper.spelledPitch)}  below prev ${lowerRole}: ${spelledPitchToString(prevLower.spelledPitch)}`,
           noteIds: [currUpper.id, prevLower.id],
           beat: curr.beat,
         });

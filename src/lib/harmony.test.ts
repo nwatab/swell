@@ -479,6 +479,227 @@ describe('chordDegreeLabel (second suite)', () => {
   });
 });
 
+// ── analyzeHarmony — diagnostic message format ───────────────────────────────
+//
+// These tests verify that every violation type produces:
+//   message: "RuleName — VoicePair/VoiceInfo, beat X" or "...beat X→Y"
+//   detail:  pitch movement + interval context
+//
+// They complement the detection-correctness tests above.
+
+describe('analyzeHarmony — parallel-fifth message format', () => {
+  // Bass: C4(60)→G4(67), Soprano: G4(67)→D5(74)
+  // C4–G4 = 7st → P5; G4–D5 = 7st → P5; both ascending
+  const comp: Composition = {
+    ...BASE,
+    voices: [
+      makeVoice('soprano', [spNote('s1', 67, 0), spNote('s2', 74, 1)]),
+      makeVoice('bass',    [spNote('b1', 60, 0), spNote('b2', 67, 1)]),
+    ],
+  };
+
+  it('message names both voices and uses beat X→Y format', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'parallel-fifth')!;
+    expect(d.message).toMatch(/Soprano/);
+    expect(d.message).toMatch(/Bass/);
+    expect(d.message).toMatch(/beat 1→2/);
+  });
+
+  it('detail shows pitch movement on both voices and P5→P5 label', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'parallel-fifth')!;
+    // G4→D5 (soprano) and C4→G4 (bass) — order depends on voice declaration order
+    expect(d.detail).toMatch(/G4.*D5|C4.*G4/);
+    expect(d.detail).toContain('P5→P5');
+  });
+});
+
+describe('analyzeHarmony — parallel-octave message format', () => {
+  // Bass: C4(60)→G4(67), Soprano: C5(72)→G5(79) — P8 apart, both ascending
+  const comp: Composition = {
+    ...BASE,
+    voices: [
+      makeVoice('soprano', [spNote('s1', 72, 0), spNote('s2', 79, 1)]),
+      makeVoice('bass',    [spNote('b1', 60, 0), spNote('b2', 67, 1)]),
+    ],
+  };
+
+  it('message names both voices and uses beat X→Y format', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'parallel-octave')!;
+    expect(d.message).toMatch(/Soprano/);
+    expect(d.message).toMatch(/Bass/);
+    expect(d.message).toMatch(/beat 1→2/);
+  });
+
+  it('detail contains P8→P8 label', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'parallel-octave')!;
+    expect(d.detail).toContain('P8→P8');
+  });
+});
+
+describe('analyzeHarmony — hidden-fifth message format', () => {
+  // Bass (outerLow): C3(48)→E3(52), Soprano (outerHigh): G4(67)→B4(71)
+  // Similar motion, soprano leaps (+4st > 2), arrival E3–B4 = 19st → P5
+  const comp: Composition = {
+    ...BASE,
+    voices: [
+      makeVoice('soprano', [spNote('s1', 67, 0), spNote('s2', 71, 1)]),
+      makeVoice('bass',    [spNote('b1', 48, 0), spNote('b2', 52, 1)]),
+    ],
+  };
+
+  it('message names outer voices and uses beat X→Y format', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'hidden-fifth')!;
+    expect(d.message).toMatch(/Soprano/);
+    expect(d.message).toMatch(/Bass/);
+    expect(d.message).toMatch(/beat 1→2/);
+  });
+
+  it('detail shows pitch movement and "similar motion to P5"', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'hidden-fifth')!;
+    expect(d.detail).toContain('similar motion to P5');
+    // Bass movement: C3→E3
+    expect(d.detail).toMatch(/C3.*E3/);
+    // Soprano movement: G4→B4
+    expect(d.detail).toMatch(/G4.*B4/);
+  });
+});
+
+describe('analyzeHarmony — voice-crossing message format', () => {
+  // Bass: D5(74) at beat 4, Soprano: A4(69) at beat 4 — bass above soprano (MIDI 74 > 69)
+  const comp: Composition = {
+    ...BASE,
+    voices: [
+      makeVoice('bass',    [spNote('b1', 60, 0), spNote('b2', 74, 4)]),
+      makeVoice('soprano', [spNote('s1', 72, 0), spNote('s2', 69, 4)]),
+    ],
+  };
+
+  it('message says "X above Y" with beat number', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'voice-crossing')!;
+    expect(d.message).toMatch(/Bass above Soprano/);
+    expect(d.message).toMatch(/beat 5/);
+  });
+
+  it('detail shows both pitches with voice labels', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'voice-crossing')!;
+    expect(d.detail).toMatch(/Bass/);
+    expect(d.detail).toMatch(/Soprano/);
+  });
+});
+
+describe('analyzeHarmony — range-violation message format', () => {
+  // Bass B1 (MIDI 35) < min 40 → too low
+  it('message uses "Out of range — Voice, beat N" format', () => {
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('bass', [{
+          id: 'b1',
+          spelledPitch: { letter: 'B', accidental: 0, octave: 1 },
+          startBeat: 0,
+          duration: 'quarter',
+        }]),
+      ],
+    };
+    const d = analyzeHarmony(comp).find(d => d.type === 'range-violation')!;
+    expect(d.message).toBe('Out of range — Bass, beat 1');
+  });
+
+  it('detail names the pitch and direction', () => {
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('bass', [{
+          id: 'b1',
+          spelledPitch: { letter: 'B', accidental: 0, octave: 1 },
+          startBeat: 0,
+          duration: 'quarter',
+        }]),
+      ],
+    };
+    const d = analyzeHarmony(comp).find(d => d.type === 'range-violation')!;
+    expect(d.detail).toMatch(/B1/);
+    expect(d.detail).toMatch(/too low/);
+  });
+});
+
+describe('analyzeHarmony — augmented-melodic-interval message format', () => {
+  // Tenor: F3(MIDI 53) → G#3(MIDI 56) — augmented 2nd (3 semitones, generic 2nd)
+  it('message uses "Aug. interval — Voice, beat X→Y" format', () => {
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('tenor', [spNote('t1', 53, 0), spNote('t2', 56, 1)]),
+      ],
+    };
+    const d = analyzeHarmony(comp).find(d => d.type === 'augmented-melodic-interval')!;
+    expect(d.message).toBe('Aug. interval — Tenor, beat 1→2');
+  });
+
+  it('detail shows the pitch movement', () => {
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('tenor', [spNote('t1', 53, 0), spNote('t2', 56, 1)]),
+      ],
+    };
+    const d = analyzeHarmony(comp).find(d => d.type === 'augmented-melodic-interval')!;
+    // F3 → G♯3 (spelledPitchToString uses ♯ symbol)
+    expect(d.detail).toMatch(/F3/);
+    expect(d.detail).toMatch(/G♯3/);
+  });
+});
+
+describe('analyzeHarmony — leading-tone-descent message format', () => {
+  // Soprano: B4(71) → A4(69) in C major — leading tone descends to non-dominant
+  it('message uses "Leading tone descent — Voice, beat X→Y" format', () => {
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('soprano', [spNote('s1', 71, 0), spNote('s2', 69, 1)]),
+      ],
+    };
+    const d = analyzeHarmony(comp).find(d => d.type === 'leading-tone-descent')!;
+    expect(d.message).toBe('Leading tone descent — Soprano, beat 1→2');
+  });
+
+  it('detail shows pitch movement and resolution hint', () => {
+    const comp: Composition = {
+      ...BASE,
+      voices: [
+        makeVoice('soprano', [spNote('s1', 71, 0), spNote('s2', 69, 1)]),
+      ],
+    };
+    const d = analyzeHarmony(comp).find(d => d.type === 'leading-tone-descent')!;
+    expect(d.detail).toMatch(/B4.*A4/);
+    expect(d.detail).toContain('should rise to tonic');
+  });
+});
+
+describe('analyzeHarmony — voice-overlap message format', () => {
+  // Tenor beat 0: E3(52 quarter), Bass beat 1: F3(53 quarter)
+  // Bass's current note (F3=53) > Tenor's previous note (E3=52) → overlap
+  const comp: Composition = {
+    ...BASE,
+    voices: [
+      makeVoice('bass',  [spNote('b1', 53, 1)]),
+      makeVoice('tenor', [spNote('t1', 52, 0), spNote('t2', 52, 1)]),
+    ],
+  };
+
+  it('message names both voices and uses beat X→Y format', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'voice-overlap')!;
+    expect(d.message).toMatch(/Bass/);
+    expect(d.message).toMatch(/Tenor/);
+    expect(d.message).toMatch(/beat \d+→\d+/);
+  });
+
+  it('detail is present', () => {
+    const d = analyzeHarmony(comp).find(d => d.type === 'voice-overlap')!;
+    expect(d.detail).toBeTruthy();
+  });
+});
+
 // ── computeBeatChordEntries ───────────────────────────────────────────────────
 
 describe('computeBeatChordEntries', () => {
