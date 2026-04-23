@@ -9,7 +9,7 @@ import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
 import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
 import type { SnapDiv } from '../lib/snap';
-import { addNote, removeNote, removeChord, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
+import { addNote, removeNote, removeChord, moveNote, moveChord, spreadChordAcrossVoices } from '../lib/music/note-operations';
 import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi, spelledPitchToMidi } from '../lib/harmony';
 import { yToPitch } from '../components/piano-roll/layout';
 
@@ -38,8 +38,6 @@ const resolutionToDuration = (resolution: number): NoteDuration => {
   return 'eighth';
 };
 
-const DOUBLE_CLICK_MS = 300;
-
 export const useNoteInteraction = ({
   composition,
   suggestionStatus,
@@ -59,7 +57,6 @@ export const useNoteInteraction = ({
   const cellWRef = useRef(cellW);
   const resolutionRef = useRef(toResolution(snapDiv));
   const selectionRef = useRef<Selection>(null);
-  const lastClickRef = useRef<{ noteId: string; time: number } | null>(null);
 
   useLayoutEffect(() => {
     dragRef.current = drag;
@@ -83,24 +80,30 @@ export const useNoteInteraction = ({
       const newBeat = Math.max(0, Math.min(totalBeats(s) - 1, snapBeat(rawBeat - d.beatOffset, res)));
       const key = keyAtBeat(s, newBeat);
       const hasMoved = newBeat !== d.originalBeat || midi !== d.originalMidi;
-      setDrag({ ...d, previewBeat: newBeat, previewSpelledPitch: spellMidi(midi, key), hasMoved });
+      const next = { ...d, previewBeat: newBeat, previewSpelledPitch: spellMidi(midi, key), hasMoved };
+      dragRef.current = next;
+      setDrag(next);
     };
 
     const handleMouseUp = () => {
       const d = dragRef.current;
       if (!d) return;
       if (d.hasMoved) {
-        setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
-        setSelection(null);
+        const dragged = compositionRef.current.voices.flatMap(v => v.notes).find(n => n.id === d.noteId);
+        if (dragged?.binding?.kind === 'chord_tone') {
+          const { chordId } = dragged.binding;
+          const beatDelta = d.previewBeat - d.originalBeat;
+          const pitchDelta = spelledPitchToMidi(d.previewSpelledPitch) - d.originalMidi;
+          const key = keyAtBeat(compositionRef.current, d.previewBeat);
+          setComposition(s => moveChord(s, chordId, beatDelta, pitchDelta, key));
+        } else {
+          setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
+          setSelection(null);
+        }
       } else {
         const note = compositionRef.current.voices.flatMap(v => v.notes).find(n => n.id === d.noteId);
         const binding = note?.binding;
-        const now = Date.now();
-        const last = lastClickRef.current;
-        const isDoubleClick = last?.noteId === d.noteId && now - last.time < DOUBLE_CLICK_MS;
-        lastClickRef.current = { noteId: d.noteId, time: now };
-
-        if (binding?.kind === 'chord_tone' && !isDoubleClick) {
+        if (binding?.kind === 'chord_tone') {
           setSelection({ kind: 'chord', chordId: binding.chordId });
         } else {
           setSelection({ kind: 'note', noteId: d.noteId });

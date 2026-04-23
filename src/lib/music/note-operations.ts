@@ -184,6 +184,25 @@ export const transposeComposition = (
 export const findVoiceForNote = (composition: Composition, noteId: string): Voice | undefined =>
   composition.voices.find(v => v.notes.some(n => n.id === noteId));
 
+/** Move all notes in a chord group by a beat delta and pitch delta (semitones). */
+export const moveChord = (
+  composition: Composition,
+  chordId: string,
+  beatDelta: number,
+  pitchDelta: number,
+  key: KeySignature,
+): Composition => ({
+  ...composition,
+  voices: composition.voices.map(v => ({
+    ...v,
+    notes: v.notes.map(n => {
+      if (!(n.binding?.kind === 'chord_tone' && n.binding.chordId === chordId)) return n;
+      const newMidi = spelledPitchToMidi(n.spelledPitch) + pitchDelta;
+      return { ...n, startBeat: n.startBeat + beatDelta, spelledPitch: spellMidi(newMidi, key) };
+    }),
+  })),
+});
+
 /** Move a note to a new beat/pitch. spelledPitch is derived from MIDI drag position. */
 export const moveNote = (
   composition: Composition,
