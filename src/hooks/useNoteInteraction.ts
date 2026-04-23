@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react
 import type { RefObject } from 'react';
 import type { Composition, NoteDuration } from '../types/song';
 import { DURATION_BEATS, totalBeats } from '../types/song';
-import type { SuggestionState, DragState } from '../types/ui-state';
+import type { SuggestionState, DragState, Selection } from '../types/ui-state';
 import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
 import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
@@ -15,6 +15,7 @@ import { yToPitch } from '../components/piano-roll/layout';
 
 export interface UseNoteInteractionReturn {
   drag: DragState | null;
+  selection: Selection;
   handleGridMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
@@ -29,13 +30,14 @@ export interface UseNoteInteractionOptions {
   gridRef: RefObject<HTMLDivElement | null>;
 }
 
-// Snap resolution → NoteDuration (approximate)
 const resolutionToDuration = (resolution: number): NoteDuration => {
   if (resolution >= 4) return 'whole';
   if (resolution >= 2) return 'half';
   if (resolution >= 1) return 'quarter';
   return 'eighth';
 };
+
+const DOUBLE_CLICK_MS = 300;
 
 export const useNoteInteraction = ({
   composition,
@@ -48,17 +50,21 @@ export const useNoteInteraction = ({
   gridRef,
 }: UseNoteInteractionOptions): UseNoteInteractionReturn => {
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [selection, setSelection] = useState<Selection>(null);
 
   const dragRef = useRef<DragState | null>(null);
   const compositionRef = useRef<Composition>(composition);
   const cellWRef = useRef(cellW);
   const resolutionRef = useRef(toResolution(snapDiv));
+  const selectionRef = useRef<Selection>(null);
+  const lastClickRef = useRef<{ noteId: string; time: number } | null>(null);
 
   useLayoutEffect(() => {
     dragRef.current = drag;
     compositionRef.current = composition;
     cellWRef.current = cellW;
     resolutionRef.current = toResolution(snapDiv);
+    selectionRef.current = selection;
   });
 
   useEffect(() => {
@@ -83,13 +89,19 @@ export const useNoteInteraction = ({
       if (!d) return;
       if (d.hasMoved) {
         setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
+        setSelection(null);
       } else {
         const note = compositionRef.current.voices.flatMap(v => v.notes).find(n => n.id === d.noteId);
         const binding = note?.binding;
-        if (binding?.kind === 'chord_tone') {
-          setComposition(s => removeChord(s, binding.chordId));
+        const now = Date.now();
+        const last = lastClickRef.current;
+        const isDoubleClick = last?.noteId === d.noteId && now - last.time < DOUBLE_CLICK_MS;
+        lastClickRef.current = { noteId: d.noteId, time: now };
+
+        if (binding?.kind === 'chord_tone' && !isDoubleClick) {
+          setSelection({ kind: 'chord', chordId: binding.chordId });
         } else {
-          setComposition(s => removeNote(s, d.noteId));
+          setSelection({ kind: 'note', noteId: d.noteId });
         }
       }
       setDrag(null);
@@ -101,7 +113,26 @@ export const useNoteInteraction = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [gridRef, setComposition]); // stable refs — gridRef.current and setState setter never change
+  }, [gridRef, setComposition]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      const sel = selectionRef.current;
+      if (!sel) return;
+      e.preventDefault();
+      if (sel.kind === 'chord') {
+        setComposition(s => removeChord(s, sel.chordId));
+      } else {
+        setComposition(s => removeNote(s, sel.noteId));
+      }
+      setSelection(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setComposition]);
 
   const handleGridMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -113,7 +144,6 @@ export const useNoteInteraction = ({
       const resolution = toResolution(snapDiv);
       if (midi === null || rawBeat < 0 || rawBeat >= totalBeats(composition)) return;
 
-      // Hit-test: find a note at this position across all voices
       const allNotes = composition.voices.flatMap(v =>
         v.notes.map(n => ({ note: n, voiceId: v.id }))
       );
@@ -136,6 +166,7 @@ export const useNoteInteraction = ({
           hasMoved: false,
         });
       } else {
+        setSelection(null);
         const snapped = Math.max(0, Math.min(totalBeats(composition) - resolution, snapBeatFloor(rawBeat, resolution)));
         const duration = resolutionToDuration(resolution);
         const key = keyAtBeat(composition, snapped);
@@ -163,5 +194,5 @@ export const useNoteInteraction = ({
     [composition, suggestionStatus, snapDiv, cellW, chordType, activeVoiceId, setComposition],
   );
 
-  return { drag, handleGridMouseDown };
+  return { drag, selection, handleGridMouseDown };
 };

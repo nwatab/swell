@@ -1,4 +1,4 @@
-import type { Composition, Voice, Note, NoteRole, PitchClass, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
+import type { Composition, Voice, Note, NoteRole, NoteBinding, PitchClass, SpelledPitch, NoteDuration, KeySignature } from '../../types/song';
 import { VOICE_ORDER } from '../../types/song';
 import { spellMidi, spelledPitchToMidi } from '../harmony';
 import { genId } from '../id';
@@ -95,12 +95,13 @@ export const addNote = (
   spelledPitch: SpelledPitch,
   startBeat: number,
   duration: NoteDuration,
+  binding?: NoteBinding,
 ): Composition => ({
   ...composition,
   voices: composition.voices.map(v =>
     v.id !== voiceId ? v : {
       ...v,
-      notes: [...v.notes, { id: genId(), spelledPitch, startBeat, duration }],
+      notes: [...v.notes, { id: genId(), spelledPitch, startBeat, duration, ...(binding ? { binding } : {}) }],
     }
   ),
 });

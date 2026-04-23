@@ -11,9 +11,10 @@ interface NoteBlockProps {
   cellW: number;
   variant?: NoteVariant;
   color?: string;
+  selected?: boolean;
 }
 
-export default function NoteBlock({ note, cellW, variant = 'normal', color = '#3b82f6' }: NoteBlockProps) {
+export default function NoteBlock({ note, cellW, variant = 'normal', color = '#3b82f6', selected = false }: NoteBlockProps) {
   const style: React.CSSProperties =
     variant === 'added'    ? { backgroundColor: '#10b981', borderColor: '#6ee7b7' } :
     variant === 'removed'  ? { backgroundColor: 'rgba(239,68,68,0.6)', borderColor: '#f87171', opacity: 0.7 } :
@@ -36,6 +37,7 @@ export default function NoteBlock({ note, cellW, variant = 'normal', color = '#3
                                              0.5 * cellW - 2,
         height: NOTE_H,
         zIndex: isBlack(midi) ? 4 : 3,
+        ...(selected ? { outline: '2px solid white', outlineOffset: '1px' } : {}),
         ...style,
       }}
     />

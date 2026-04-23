@@ -3,7 +3,7 @@
 import type { Note, Composition } from '../../types/song';
 import { VOICE_COLORS } from '../../types/song';
 import { spelledPitchToMidi } from '../../lib/harmony';
-import type { SuggestionState, DragState, AutocompleteNote } from '../../types/ui-state';
+import type { SuggestionState, DragState, AutocompleteNote, Selection } from '../../types/ui-state';
 import { MIN_PITCH, MAX_PITCH } from './layout';
 import NoteBlock, { type NoteVariant } from './NoteBlock';
 
@@ -14,11 +14,18 @@ interface NoteLayerProps {
   drag: DragState | null;
   cellW: number;
   ghostNotes?: AutocompleteNote[];
+  selection?: Selection;
 }
 
 type NoteEntry = { note: Note; variant: NoteVariant; color?: string };
 
-export default function NoteLayer({ composition, activeComposition, suggestion, drag, cellW, ghostNotes = [] }: NoteLayerProps) {
+const isNoteSelected = (note: Note, sel: Selection): boolean => {
+  if (!sel) return false;
+  if (sel.kind === 'note') return note.id === sel.noteId;
+  return note.binding?.kind === 'chord_tone' && note.binding.chordId === sel.chordId;
+};
+
+export default function NoteLayer({ composition, activeComposition, suggestion, drag, cellW, ghostNotes = [], selection }: NoteLayerProps) {
   const allNotes = (c: Composition): NoteEntry[] =>
     c.voices.flatMap(v =>
       v.notes.map(note => ({
@@ -87,6 +94,7 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
             cellW={cellW}
             variant={variant}
             color={noteColor}
+            selected={variant === 'normal' && isNoteSelected(note, selection ?? null)}
           />
         );
       })}

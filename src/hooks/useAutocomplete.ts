@@ -5,6 +5,7 @@ import type { Composition } from '../types/song';
 import { beatsPerMeasure, DURATION_BEATS } from '../types/song';
 import type { AutocompleteState, AutocompleteNote } from '../types/ui-state';
 import { addNote } from '../lib/music/note-operations';
+import { genId } from '../lib/id';
 
 export type UseAutocompleteReturn = {
   autocomplete: AutocompleteState;
@@ -65,8 +66,10 @@ export const useAutocomplete = (
       let updated = maxMeasureIdx >= comp.measureCount
         ? { ...comp, measureCount: comp.measureCount + 1 }
         : comp;
+      const chordId = genId();
       for (const gn of notes) {
-        updated = addNote(updated, gn.voiceId, gn.spelledPitch, gn.startBeat, gn.duration);
+        const binding = { kind: 'chord_tone' as const, chordId, role: 'root' as const };
+        updated = addNote(updated, gn.voiceId, gn.spelledPitch, gn.startBeat, gn.duration, binding);
       }
       return updated;
     });

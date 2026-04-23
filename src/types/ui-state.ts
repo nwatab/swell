@@ -36,3 +36,8 @@ export type MusicGenState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'error'; message: string };
+
+export type Selection =
+  | { kind: 'chord'; chordId: string }
+  | { kind: 'note'; noteId: string }
+  | null;

@@ -55,7 +55,7 @@ export default function PianoRoll() {
     if (keyboardRef.current) keyboardRef.current.scrollTop = e.currentTarget.scrollTop;
   };
 
-  const { drag, handleGridMouseDown } = useNoteInteraction({
+  const { drag, selection, handleGridMouseDown } = useNoteInteraction({
     composition,
     suggestionStatus: suggestion.status,
     snapDiv,
@@ -146,6 +146,7 @@ export default function PianoRoll() {
               drag={drag}
               cellW={cellW}
               ghostNotes={ghostNotes}
+              selection={selection}
             />
             {playing && <Playhead beat={playhead} cellW={cellW} />}
           </div>
