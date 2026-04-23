@@ -12,6 +12,7 @@ import { useAutocomplete } from '../../hooks/useAutocomplete';
 import { toResolution } from '../../lib/snap';
 import type { SnapDiv } from '../../lib/snap';
 import type { ChordType } from '../../lib/music/chord';
+import type { EditMode } from '../../types/ui-state';
 import { totalBeats, beatsPerMeasure, DURATION_BEATS } from '../../types/song';
 import { computeBeatChordEntries } from '../../lib/harmony';
 import { NUM_WHITE_KEYS, WHITE_H } from './layout';
@@ -35,6 +36,7 @@ export default function PianoRoll() {
 
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
   const [chordType, setChordType] = useState<ChordType>('note');
+  const [editMode, setEditMode] = useState<EditMode>('draw');
   const [problemsOpen, setProblemsOpen] = useState(false);
 
   const { suggestion, handleAgentSubmit, handleAccept, handleReject } = useAgentSuggestion(composition, setComposition);
@@ -61,6 +63,7 @@ export default function PianoRoll() {
     snapDiv,
     cellW,
     chordType,
+    editMode,
     activeVoiceId,
     setComposition,
     gridRef,
@@ -105,6 +108,8 @@ export default function PianoRoll() {
         canZoomOut={canZoomOut}
         chordType={chordType}
         onChordTypeChange={setChordType}
+        editMode={editMode}
+        onEditModeChange={setEditMode}
         globalKey={composition.keySignature}
         onGlobalKeyChange={handleKeyChange}
       />
@@ -127,7 +132,11 @@ export default function PianoRoll() {
             ref={gridRef}
             className={[
               'relative',
-              suggestion.status === 'ready' ? 'cursor-not-allowed' : drag ? 'cursor-grabbing' : 'cursor-crosshair',
+              suggestion.status === 'ready'
+                ? 'cursor-not-allowed'
+                : drag
+                  ? 'cursor-grabbing'
+                  : editMode === 'select' ? 'cursor-default' : 'cursor-crosshair',
             ].join(' ')}
             style={{ width: gridWidth, height: gridHeight }}
             onMouseDown={handleGridMouseDown}

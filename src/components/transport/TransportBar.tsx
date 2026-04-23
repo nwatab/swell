@@ -4,11 +4,13 @@ import { useRef } from 'react';
 import type { Composition, KeySignature } from '../../types/song';
 import type { SnapDiv } from '../../lib/snap';
 import type { ChordType } from '../../lib/music/chord';
+import type { EditMode } from '../../types/ui-state';
 import { parseSwell } from '../../lib/swell-format/deserialize';
 import SnapSelector from './SnapSelector';
 import ChordSelector from './ChordSelector';
 import KeySelector from './KeySelector';
 import ZoomControls from './ZoomControls';
+import ModeSelector from './ModeSelector';
 
 interface TransportBarProps {
   playing: boolean;
@@ -28,6 +30,8 @@ interface TransportBarProps {
   canZoomOut: boolean;
   chordType: ChordType;
   onChordTypeChange: (ct: ChordType) => void;
+  editMode: EditMode;
+  onEditModeChange: (mode: EditMode) => void;
   globalKey: KeySignature;
   onGlobalKeyChange: (key: KeySignature) => void;
 }
@@ -50,6 +54,8 @@ export default function TransportBar({
   canZoomOut,
   chordType,
   onChordTypeChange,
+  editMode,
+  onEditModeChange,
   globalKey,
   onGlobalKeyChange,
 }: TransportBarProps) {
@@ -116,6 +122,7 @@ export default function TransportBar({
           onChange={handleFileChange}
         />
       </div>
+      <ModeSelector editMode={editMode} onEditModeChange={onEditModeChange} />
       <SnapSelector snapDiv={snapDiv} onSnapDivChange={onSnapDivChange} />
       <ChordSelector chordType={chordType} onChordTypeChange={onChordTypeChange} />
       <KeySelector keySignature={globalKey} onKeyChange={onGlobalKeyChange} />

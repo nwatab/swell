@@ -41,3 +41,5 @@ export type Selection =
   | { kind: 'chord'; chordId: string }
   | { kind: 'note'; noteId: string }
   | null;
+
+export type EditMode = 'draw' | 'select';

@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react
 import type { RefObject } from 'react';
 import type { Composition, NoteDuration } from '../types/song';
 import { DURATION_BEATS, totalBeats } from '../types/song';
-import type { SuggestionState, DragState, Selection } from '../types/ui-state';
+import type { SuggestionState, DragState, Selection, EditMode } from '../types/ui-state';
 import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
 import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
@@ -25,6 +25,7 @@ export interface UseNoteInteractionOptions {
   snapDiv: SnapDiv;
   cellW: number;
   chordType: ChordType;
+  editMode: EditMode;
   activeVoiceId: string | null;
   setComposition: React.Dispatch<React.SetStateAction<Composition>>;
   gridRef: RefObject<HTMLDivElement | null>;
@@ -45,6 +46,7 @@ export const useNoteInteraction = ({
   snapDiv,
   cellW,
   chordType,
+  editMode,
   activeVoiceId,
   setComposition,
   gridRef,
@@ -167,6 +169,8 @@ export const useNoteInteraction = ({
         });
       } else {
         setSelection(null);
+        if (editMode === 'select') return;
+
         const snapped = Math.max(0, Math.min(totalBeats(composition) - resolution, snapBeatFloor(rawBeat, resolution)));
         const duration = resolutionToDuration(resolution);
         const key = keyAtBeat(composition, snapped);
@@ -191,7 +195,7 @@ export const useNoteInteraction = ({
         }
       }
     },
-    [composition, suggestionStatus, snapDiv, cellW, chordType, activeVoiceId, setComposition],
+    [composition, suggestionStatus, snapDiv, cellW, chordType, editMode, activeVoiceId, setComposition],
   );
 
   return { drag, selection, handleGridMouseDown };
