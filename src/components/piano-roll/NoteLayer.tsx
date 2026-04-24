@@ -2,7 +2,7 @@
 
 import type { Note, Composition } from '../../types/song';
 import { VOICE_COLORS } from '../../types/song';
-import { spelledPitchToMidi, spellMidi } from '../../lib/harmony';
+import { spelledPitchToMidi } from '../../lib/harmony';
 import type { SuggestionState, DragState, AutocompleteNote, Selection } from '../../types/ui-state';
 import { MIN_PITCH, MAX_PITCH } from './layout';
 import NoteBlock, { type NoteVariant } from './NoteBlock';
@@ -57,43 +57,19 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
     };
   });
 
-  const draggedNote = drag ? composition.voices.flatMap(v => v.notes).find(n => n.id === drag.noteId) : null;
-  const chordDragId =
-    draggedNote?.binding?.kind === 'chord_tone' ? draggedNote.binding.chordId : null;
-  const beatDelta = drag ? drag.previewBeat - drag.originalBeat : 0;
-  const pitchDelta = drag && chordDragId ? spelledPitchToMidi(drag.previewSpelledPitch) - drag.originalMidi : 0;
-
   const displayNotes: NoteEntry[] = drag?.hasMoved
-    ? chordDragId
-      ? [
-          ...baseNotes.filter(
-            ({ note }) => !(note.binding?.kind === 'chord_tone' && note.binding.chordId === chordDragId),
-          ),
-          ...baseNotes
-            .filter(({ note }) => note.binding?.kind === 'chord_tone' && note.binding.chordId === chordDragId)
-            .map(({ note, color }) => ({
-              note: {
-                ...note,
-                startBeat: note.startBeat + beatDelta,
-                spelledPitch: spellMidi(spelledPitchToMidi(note.spelledPitch) + pitchDelta, composition.keySignature),
-              },
-              variant: 'dragging' as const,
-              color,
-            })),
-          ...ghostEntries,
-        ]
-      : [
-          ...baseNotes.filter(({ note }) => note.id !== drag.noteId),
-          {
-            note: {
-              ...composition.voices.flatMap(v => v.notes).find(n => n.id === drag.noteId)!,
-              startBeat: drag.previewBeat,
-              spelledPitch: drag.previewSpelledPitch,
-            },
-            variant: 'dragging' as const,
+    ? [
+        ...baseNotes.filter(({ note }) => note.id !== drag.noteId),
+        {
+          note: {
+            ...composition.voices.flatMap(v => v.notes).find(n => n.id === drag.noteId)!,
+            startBeat: drag.previewBeat,
+            spelledPitch: drag.previewSpelledPitch,
           },
-          ...ghostEntries,
-        ]
+          variant: 'dragging' as const,
+        },
+        ...ghostEntries,
+      ]
     : [...baseNotes, ...ghostEntries];
 
   // Derive voice color for suggestion diff notes

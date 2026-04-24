@@ -9,7 +9,7 @@ import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
 import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
 import type { SnapDiv } from '../lib/snap';
-import { addNote, removeNote, removeChord, moveNote, moveChord, spreadChordAcrossVoices } from '../lib/music/note-operations';
+import { addNote, removeNote, removeChord, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
 import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi, spelledPitchToMidi } from '../lib/harmony';
 import { yToPitch } from '../components/piano-roll/layout';
 
@@ -92,17 +92,8 @@ export const useNoteInteraction = ({
       const d = dragRef.current;
       if (!d) return;
       if (d.hasMoved) {
-        const dragged = compositionRef.current.voices.flatMap(v => v.notes).find(n => n.id === d.noteId);
-        if (dragged?.binding?.kind === 'chord_tone') {
-          const { chordId } = dragged.binding;
-          const beatDelta = d.previewBeat - d.originalBeat;
-          const pitchDelta = spelledPitchToMidi(d.previewSpelledPitch) - d.originalMidi;
-          const key = keyAtBeat(compositionRef.current, d.previewBeat);
-          setComposition(s => moveChord(s, chordId, beatDelta, pitchDelta, key));
-        } else {
-          setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
-          setSelection(null);
-        }
+        setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
+        setSelection(null);
       } else if (editModeRef.current === 'select') {
         const note = compositionRef.current.voices.flatMap(v => v.notes).find(n => n.id === d.noteId);
         const binding = note?.binding;
