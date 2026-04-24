@@ -17,6 +17,7 @@ export interface UseNoteInteractionReturn {
   drag: DragState | null;
   selection: Selection;
   handleGridMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
+  handleGridDoubleClick: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 export interface UseNoteInteractionOptions {
@@ -57,6 +58,7 @@ export const useNoteInteraction = ({
   const cellWRef = useRef(cellW);
   const resolutionRef = useRef(toResolution(snapDiv));
   const selectionRef = useRef<Selection>(null);
+  const editModeRef = useRef<EditMode>(editMode);
 
   useLayoutEffect(() => {
     dragRef.current = drag;
@@ -64,6 +66,7 @@ export const useNoteInteraction = ({
     cellWRef.current = cellW;
     resolutionRef.current = toResolution(snapDiv);
     selectionRef.current = selection;
+    editModeRef.current = editMode;
   });
 
   useEffect(() => {
@@ -100,13 +103,19 @@ export const useNoteInteraction = ({
           setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
           setSelection(null);
         }
-      } else {
+      } else if (editModeRef.current === 'select') {
         const note = compositionRef.current.voices.flatMap(v => v.notes).find(n => n.id === d.noteId);
         const binding = note?.binding;
+        const cur = selectionRef.current;
         if (binding?.kind === 'chord_tone') {
-          setSelection({ kind: 'chord', chordId: binding.chordId });
-        } else {
-          setSelection({ kind: 'note', noteId: d.noteId });
+          const alreadySelected =
+            (cur?.kind === 'chord' && cur.chordId === binding.chordId) ||
+            (cur?.kind === 'note' && cur.noteId === d.noteId);
+          if (!alreadySelected) setSelection({ kind: 'chord', chordId: binding.chordId });
+        } else if (note) {
+          if (!(cur?.kind === 'note' && cur.noteId === note.id)) {
+            setSelection({ kind: 'note', noteId: note.id });
+          }
         }
       }
       setDrag(null);
@@ -161,6 +170,8 @@ export const useNoteInteraction = ({
 
       if (hit) {
         const { note } = hit;
+        // ダブルクリックの2回目 mousedown では drag を開始しない（dblclick で処理）
+        if (e.detail >= 2 && note.binding?.kind === 'chord_tone') return;
         setDrag({
           noteId: note.id,
           originalBeat: note.startBeat,
@@ -201,5 +212,27 @@ export const useNoteInteraction = ({
     [composition, suggestionStatus, snapDiv, cellW, chordType, editMode, activeVoiceId, setComposition],
   );
 
-  return { drag, selection, handleGridMouseDown };
+  const handleGridDoubleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (suggestionStatus === 'ready') return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const rawBeat = (e.clientX - rect.left) / cellW;
+      const midi = yToPitch(e.clientY - rect.top);
+      if (midi === null || rawBeat < 0 || rawBeat >= totalBeats(composition)) return;
+
+      const hit = composition.voices.flatMap(v => v.notes).find(n => {
+        const noteMidi = spelledPitchToMidi(n.spelledPitch);
+        return noteMidi === midi &&
+          rawBeat >= n.startBeat &&
+          rawBeat < n.startBeat + DURATION_BEATS[n.duration];
+      });
+
+      if (hit?.binding?.kind === 'chord_tone') {
+        setSelection({ kind: 'note', noteId: hit.id });
+      }
+    },
+    [composition, suggestionStatus, cellW],
+  );
+
+  return { drag, selection, handleGridMouseDown, handleGridDoubleClick };
 };

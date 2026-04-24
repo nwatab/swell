@@ -57,7 +57,7 @@ export default function PianoRoll() {
     if (keyboardRef.current) keyboardRef.current.scrollTop = e.currentTarget.scrollTop;
   };
 
-  const { drag, selection, handleGridMouseDown } = useNoteInteraction({
+  const { drag, selection, handleGridMouseDown, handleGridDoubleClick } = useNoteInteraction({
     composition,
     suggestionStatus: suggestion.status,
     snapDiv,
@@ -140,6 +140,7 @@ export default function PianoRoll() {
             ].join(' ')}
             style={{ width: gridWidth, height: gridHeight }}
             onMouseDown={handleGridMouseDown}
+            onDoubleClick={handleGridDoubleClick}
           >
             <Grid
               totalBeats={tb}

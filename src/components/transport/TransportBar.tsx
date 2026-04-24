@@ -10,7 +10,6 @@ import SnapSelector from './SnapSelector';
 import ChordSelector from './ChordSelector';
 import KeySelector from './KeySelector';
 import ZoomControls from './ZoomControls';
-import ModeSelector from './ModeSelector';
 
 interface TransportBarProps {
   playing: boolean;
@@ -122,9 +121,13 @@ export default function TransportBar({
           onChange={handleFileChange}
         />
       </div>
-      <ModeSelector editMode={editMode} onEditModeChange={onEditModeChange} />
       <SnapSelector snapDiv={snapDiv} onSnapDivChange={onSnapDivChange} />
-      <ChordSelector chordType={chordType} onChordTypeChange={onChordTypeChange} />
+      <ChordSelector
+        chordType={chordType}
+        onChordTypeChange={onChordTypeChange}
+        editMode={editMode}
+        onEditModeChange={onEditModeChange}
+      />
       <KeySelector keySignature={globalKey} onKeyChange={onGlobalKeyChange} />
       <ZoomControls
         onZoomIn={onZoomIn}

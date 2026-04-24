@@ -63,7 +63,7 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
   const beatDelta = drag ? drag.previewBeat - drag.originalBeat : 0;
   const pitchDelta = drag && chordDragId ? spelledPitchToMidi(drag.previewSpelledPitch) - drag.originalMidi : 0;
 
-  const displayNotes: NoteEntry[] = drag
+  const displayNotes: NoteEntry[] = drag?.hasMoved
     ? chordDragId
       ? [
           ...baseNotes.filter(
@@ -118,7 +118,7 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
             cellW={cellW}
             variant={variant}
             color={noteColor}
-            selected={variant === 'normal' && isNoteSelected(note, selection ?? null)}
+            selected={(variant === 'normal' || variant === 'dragging') && isNoteSelected(note, selection ?? null)}
           />
         );
       })}
