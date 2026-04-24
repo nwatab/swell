@@ -4,8 +4,6 @@ import type { Composition } from '../../../types/song';
 import { beatsPerMeasure, DURATION_BEATS } from '../../../types/song';
 import type { AutocompleteNote } from '../../../types/ui-state';
 import { compositionToText } from '../../../lib/music/score-repr';
-import { spreadChordAcrossVoices } from '../../../lib/music/note-operations';
-import { spelledPitchToMidi } from '../../../lib/harmony';
 
 const client = new Anthropic();
 
@@ -19,8 +17,11 @@ JSON schema for each element:
 Rules:
 - Exactly 4 notes, one per voice (use the voice IDs provided)
 - duration must be "whole"
-- Study the existing progression and choose the chord that best continues the harmonic narrative — consider function (tonic/subdominant/dominant), whether a cadence is appropriate, and what creates musical interest at this point
-- Choose smooth voice leading: minimize leaps, resolve tendency tones
+- Create harmonic movement: the suggested chord MUST differ in root or quality from the immediately preceding chord — never repeat the same chord
+- For the first chord of an empty piece, choose an interesting starting harmony (I, vi, IV, or I6 are all valid — vary it)
+- Study the existing progression and choose the chord that best continues the harmonic narrative — consider function (tonic/subdominant/dominant), tension and release, and authentic/deceptive cadences
+- Favor common functional progressions: I→IV→V→I, I→vi→IV→V, I→V→vi→IV, ii→V→I, etc.
+- Choose smooth voice leading: minimize leaps, resolve tendency tones (7th of V resolves up, 4th resolves down)
 - SATB comfortable ranges: soprano C4-G5, alto G3-C5, tenor C3-G4, bass E2-C4
 - letter must be one of: C D E F G A B
 - accidental must be one of: -2 -1 0 1 2`;
@@ -60,26 +61,14 @@ export async function POST(req: NextRequest) {
   const bpm = beatsPerMeasure(composition);
   const isEmpty = composition.voices.every(v => v.notes.length === 0);
 
-  if (isEmpty) {
-    const { keySignature } = composition;
-    const tonicMidi = spelledPitchToMidi({ ...keySignature.tonic, octave: 3 });
-    const intervals: readonly number[] = keySignature.mode === 'major' ? [0, 4, 7] : [0, 3, 7];
-    const suggested = spreadChordAcrossVoices(composition, tonicMidi, 0, 'whole', intervals, keySignature);
-    const notes: AutocompleteNote[] = suggested.voices.flatMap(v =>
-      v.notes.map(n => ({
-        voiceId: v.id,
-        spelledPitch: n.spelledPitch,
-        startBeat: n.startBeat,
-        duration: n.duration,
-      }))
-    );
-    return NextResponse.json({ notes });
-  }
-
-  const lastNoteBeat = composition.voices
-    .flatMap(v => v.notes)
-    .reduce((max, n) => Math.max(max, n.startBeat + DURATION_BEATS[n.duration]), 0);
-  const nextStartBeat = Math.ceil(lastNoteBeat / bpm) * bpm;
+  const nextStartBeat = isEmpty
+    ? 0
+    : (() => {
+        const lastNoteBeat = composition.voices
+          .flatMap(v => v.notes)
+          .reduce((max, n) => Math.max(max, n.startBeat + DURATION_BEATS[n.duration]), 0);
+        return Math.ceil(lastNoteBeat / bpm) * bpm;
+      })();
 
   const voiceList = composition.voices.map(v => `${v.role}: voiceId="${v.id}"`).join(', ');
   const userMessage = `${compositionToText(composition)}\n\nVoices: ${voiceList}\nNext measure start beat: ${nextStartBeat}`;
@@ -89,7 +78,7 @@ export async function POST(req: NextRequest) {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
       const response = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 512,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userMessage }],
