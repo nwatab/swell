@@ -93,7 +93,7 @@ export default function PianoRoll() {
       <TransportBar
         playing={playing}
         beat={playhead}
-        bpm={composition.bpm}
+        bpm={activeComposition.bpm}
         onTogglePlay={togglePlay}
         onBpmChange={handleBpmChange}
         onMusicGenToggle={handleMusicGenToggle}
@@ -111,7 +111,7 @@ export default function PianoRoll() {
         onChordTypeChange={setChordType}
         editMode={editMode}
         onEditModeChange={setEditMode}
-        globalKey={composition.keySignature}
+        globalKey={activeComposition.keySignature}
         onGlobalKeyChange={handleKeyChange}
       />
       <TracksBar
