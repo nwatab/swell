@@ -9,6 +9,14 @@ export type SuggestionState =
   | { status: 'loading' }
   | { status: 'ready'; suggestedComposition: Composition; diff: NoteDiff };
 
+export type ChatEntry =
+  | { id: string; role: 'user'; text: string }
+  | { id: string; role: 'assistant'; status: 'loading' }
+  | { id: string; role: 'assistant'; status: 'ready'; diff: NoteDiff }
+  | { id: string; role: 'assistant'; status: 'accepted' }
+  | { id: string; role: 'assistant'; status: 'rejected' }
+  | { id: string; role: 'assistant'; status: 'error'; message: string };
+
 export type DragState = {
   noteId: string;
   originalBeat: number;

@@ -39,7 +39,7 @@ export default function PianoRoll() {
   const [editMode, setEditMode] = useState<EditMode>('draw');
   const [problemsOpen, setProblemsOpen] = useState(false);
 
-  const { suggestion, handleAgentSubmit, handleAccept, handleReject } = useAgentSuggestion(composition, setComposition);
+  const { suggestion, history, handleAgentSubmit, handleAccept, handleReject, clearHistory } = useAgentSuggestion(composition, setComposition);
   const { autocomplete, acceptAutocomplete, dismissAutocomplete } = useAutocomplete(
     composition, setComposition, suggestion.status !== 'idle',
   );
@@ -123,66 +123,73 @@ export default function PianoRoll() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <Keyboard globalKey={composition.keySignature} scrollRef={keyboardRef} />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex flex-1 overflow-hidden">
+            <Keyboard globalKey={composition.keySignature} scrollRef={keyboardRef} />
 
-        <div className="flex-1 overflow-auto overscroll-none" onScroll={handleScroll}>
-          <BeatHeader totalBeats={displayTotalBeats} beatsPerMeasure={bpm} cellW={cellW} beatChords={beatChords} />
+            <div className="flex-1 overflow-auto overscroll-none" onScroll={handleScroll}>
+              <BeatHeader totalBeats={displayTotalBeats} beatsPerMeasure={bpm} cellW={cellW} beatChords={beatChords} />
 
-          <div
-            ref={gridRef}
-            className={[
-              'relative',
-              suggestion.status === 'ready'
-                ? 'cursor-not-allowed'
-                : drag
-                  ? 'cursor-grabbing'
-                  : editMode === 'select' ? 'cursor-default' : 'cursor-crosshair',
-            ].join(' ')}
-            style={{ width: gridWidth, height: gridHeight }}
-            onMouseDown={handleGridMouseDown}
-            onDoubleClick={handleGridDoubleClick}
-          >
-            <Grid
-              totalBeats={tb}
-              beatsPerMeasure={bpm}
-              cellW={cellW}
-              resolution={resolution}
-              globalKey={composition.keySignature}
-            />
-            <NoteLayer
-              composition={composition}
-              activeComposition={activeComposition}
-              suggestion={suggestion}
-              drag={drag}
-              cellW={cellW}
-              ghostNotes={ghostNotes}
-              selection={selection}
-            />
-            {playing && <Playhead beat={playhead} cellW={cellW} />}
+              <div
+                ref={gridRef}
+                className={[
+                  'relative',
+                  suggestion.status === 'ready'
+                    ? 'cursor-not-allowed'
+                    : drag
+                      ? 'cursor-grabbing'
+                      : editMode === 'select' ? 'cursor-default' : 'cursor-crosshair',
+                ].join(' ')}
+                style={{ width: gridWidth, height: gridHeight }}
+                onMouseDown={handleGridMouseDown}
+                onDoubleClick={handleGridDoubleClick}
+              >
+                <Grid
+                  totalBeats={tb}
+                  beatsPerMeasure={bpm}
+                  cellW={cellW}
+                  resolution={resolution}
+                  globalKey={composition.keySignature}
+                />
+                <NoteLayer
+                  composition={composition}
+                  activeComposition={activeComposition}
+                  suggestion={suggestion}
+                  drag={drag}
+                  cellW={cellW}
+                  ghostNotes={ghostNotes}
+                  selection={selection}
+                />
+                {playing && <Playhead beat={playhead} cellW={cellW} />}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {autocomplete.status === 'ready' && (
-        <div className="flex items-center gap-3 px-4 py-1.5 bg-zinc-800 border-t border-zinc-700 text-xs text-zinc-400">
-          <span className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse" />
-          <span>Tab to accept suggestion</span>
-          <span className="text-zinc-600">Esc to dismiss</span>
-          <button onClick={acceptAutocomplete} className="ml-auto px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Tab</button>
-          <button onClick={dismissAutocomplete} className="px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Esc</button>
+          {autocomplete.status === 'ready' && (
+            <div className="flex items-center gap-3 px-4 py-1.5 bg-zinc-800 border-t border-zinc-700 text-xs text-zinc-400 flex-shrink-0">
+              <span className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse" />
+              <span>Tab to accept suggestion</span>
+              <span className="text-zinc-600">Esc to dismiss</span>
+              <button onClick={acceptAutocomplete} className="ml-auto px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Tab</button>
+              <button onClick={dismissAutocomplete} className="px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-300">Esc</button>
+            </div>
+          )}
+          <ProblemsPanel
+            diagnostics={diagnostics}
+            open={problemsOpen}
+            onToggle={() => setProblemsOpen(v => !v)}
+          />
         </div>
-      )}
-      <AgentBar
-        suggestion={suggestion}
-        onSubmit={handleAgentSubmit}
-        onAccept={handleAccept}
-        onReject={handleReject}
-      />
-      <ProblemsPanel
-        diagnostics={diagnostics}
-        open={problemsOpen}
-        onToggle={() => setProblemsOpen(v => !v)}
-      />
+
+        <AgentBar
+          suggestion={suggestion}
+          history={history}
+          onSubmit={handleAgentSubmit}
+          onAccept={handleAccept}
+          onReject={handleReject}
+          onClearHistory={clearHistory}
+        />
+      </div>
     </div>
   );
 }
