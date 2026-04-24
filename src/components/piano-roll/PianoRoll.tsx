@@ -48,7 +48,7 @@ export default function PianoRoll() {
   const { diagnostics } = useDiagnostics(composition);
 
   const activeComposition = suggestion.status === 'ready' ? suggestion.suggestedComposition : composition;
-  const { playing, playhead, togglePlay } = usePlayback(activeComposition);
+  const { playing, playhead, togglePlay, previewNote } = usePlayback(activeComposition);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const keyboardRef = useRef<HTMLDivElement>(null);
@@ -125,7 +125,7 @@ export default function PianoRoll() {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="flex flex-1 overflow-hidden">
-            <Keyboard globalKey={composition.keySignature} scrollRef={keyboardRef} />
+            <Keyboard globalKey={composition.keySignature} scrollRef={keyboardRef} onKeyClick={previewNote} />
 
             <div className="flex-1 overflow-auto overscroll-none" onScroll={handleScroll}>
               <BeatHeader totalBeats={displayTotalBeats} beatsPerMeasure={bpm} cellW={cellW} beatChords={beatChords} />

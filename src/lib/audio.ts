@@ -37,6 +37,25 @@ const scheduleNote = (
   return osc;
 };
 
+export const previewNote = (ctx: AudioContext, midi: number): void => {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = 'triangle';
+  osc.frequency.value = midiToFreq(midi);
+  const t0 = ctx.currentTime + 0.005;
+  const dur = 0.4;
+  const amp = 0.35;
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(amp, t0 + 0.006);
+  gain.gain.exponentialRampToValueAtTime(amp * 0.35, t0 + 0.09);
+  gain.gain.setValueAtTime(amp * 0.35, t0 + dur - 0.06);
+  gain.gain.exponentialRampToValueAtTime(0.00001, t0 + dur + 0.08);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.1);
+};
+
 export const playComposition = (
   ctx: AudioContext,
   composition: Composition,

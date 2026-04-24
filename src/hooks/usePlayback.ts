@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Composition } from '../types/song';
 import { totalBeats, DURATION_BEATS } from '../types/song';
-import { playComposition } from '../lib/audio';
+import { playComposition, previewNote } from '../lib/audio';
 
 export interface UsePlaybackReturn {
   playing: boolean;
   playhead: number;
   togglePlay: () => void;
+  previewNote: (midi: number) => void;
 }
 
 export const usePlayback = (activeComposition: Composition): UsePlaybackReturn => {
@@ -20,7 +21,7 @@ export const usePlayback = (activeComposition: Composition): UsePlaybackReturn =
   const rafRef = useRef<number>(0);
   const playStartWallRef = useRef<number>(0);
   const activeCompositionRef = useRef<Composition>(activeComposition);
-  activeCompositionRef.current = activeComposition;
+  useEffect(() => { activeCompositionRef.current = activeComposition; });
   const isPlayingRef = useRef(false);
 
   const getCtx = (): AudioContext => {
@@ -66,5 +67,9 @@ export const usePlayback = (activeComposition: Composition): UsePlaybackReturn =
     if (playing) stopPlayback(); else startPlayback();
   }, [playing, startPlayback, stopPlayback]);
 
-  return { playing, playhead, togglePlay };
+  const handlePreviewNote = useCallback((midi: number) => {
+    previewNote(getCtx(), midi);
+  }, []);
+
+  return { playing, playhead, togglePlay, previewNote: handlePreviewNote };
 };
