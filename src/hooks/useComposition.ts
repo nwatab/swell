@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import type { Composition, KeySignature } from '../types/song';
 import { DEFAULT_COMPOSITION } from '../types/song';
 import { downloadSwell } from '../lib/swell-format/serialize';
+import { downloadMidi } from '../lib/midi-export';
 import { transposeComposition } from '../lib/music/note-operations';
 
 export interface UseCompositionReturn {
@@ -12,6 +13,7 @@ export interface UseCompositionReturn {
   activeVoiceId: string | null;
   setActiveVoiceId: React.Dispatch<React.SetStateAction<string | null>>;
   handleExport: () => void;
+  handleMidiExport: () => void;
   handleImport: (imported: Composition) => void;
   handleBpmChange: (bpm: number) => void;
   handleKeyChange: (key: KeySignature) => void;
@@ -24,6 +26,7 @@ export const useComposition = (): UseCompositionReturn => {
   );
 
   const handleExport = useCallback(() => downloadSwell(composition), [composition]);
+  const handleMidiExport = useCallback(() => downloadMidi(composition), [composition]);
   const handleImport = useCallback((imported: Composition) => {
     setComposition(imported);
     setActiveVoiceId(imported.voices[0]?.id ?? null);
@@ -43,6 +46,7 @@ export const useComposition = (): UseCompositionReturn => {
     activeVoiceId,
     setActiveVoiceId,
     handleExport,
+    handleMidiExport,
     handleImport,
     handleBpmChange,
     handleKeyChange,

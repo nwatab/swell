@@ -31,7 +31,7 @@ export default function PianoRoll() {
   const {
     composition, setComposition,
     activeVoiceId, setActiveVoiceId,
-    handleExport, handleImport, handleBpmChange, handleKeyChange,
+    handleExport, handleMidiExport, handleImport, handleBpmChange, handleKeyChange,
   } = useComposition();
 
   const [snapDiv, setSnapDiv] = useState<SnapDiv>('1/4');
@@ -99,6 +99,7 @@ export default function PianoRoll() {
         onMusicGenToggle={handleMusicGenToggle}
         musicGenActive={musicGen.status !== 'hidden'}
         onExport={handleExport}
+        onMidiExport={handleMidiExport}
         onImport={handleImport}
         snapDiv={snapDiv}
         onSnapDivChange={setSnapDiv}

@@ -20,6 +20,7 @@ interface TransportBarProps {
   onMusicGenToggle: () => void;
   musicGenActive: boolean;
   onExport: () => void;
+  onMidiExport: () => void;
   onImport: (composition: Composition) => void;
   snapDiv: SnapDiv;
   onSnapDivChange: (div: SnapDiv) => void;
@@ -44,6 +45,7 @@ export default function TransportBar({
   onMusicGenToggle,
   musicGenActive,
   onExport,
+  onMidiExport,
   onImport,
   snapDiv,
   onSnapDivChange,
@@ -106,6 +108,12 @@ export default function TransportBar({
           className="px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-xs text-zinc-300 transition-colors"
         >
           Save
+        </button>
+        <button
+          onClick={onMidiExport}
+          className="px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-xs text-zinc-300 transition-colors"
+        >
+          MIDI
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
