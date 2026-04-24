@@ -30,7 +30,7 @@ The composition format:
         {
           "id": string,
           "spelledPitch": { "letter": "C"|"D"|"E"|"F"|"G"|"A"|"B", "accidental": -2|-1|0|1|2, "octave": number },
-          "startBeat": number,
+          "startBeat": number,  // 0-indexed; 0 = first beat of the piece
           "duration": "whole"|"half"|"quarter"|"eighth"
         }
       ]
