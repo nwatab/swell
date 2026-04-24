@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     for (let turn = 0; turn < 5; turn++) {
       const response = await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
+        max_tokens: 16000,
         system: SYSTEM_PROMPT,
         tools: TOOLS,
         messages,
@@ -194,7 +194,12 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      break; // unexpected stop_reason (e.g. 'max_tokens')
+      // max_tokens or other unexpected stop — ask model to complete
+      messages.push({
+        role: 'user',
+        content: 'Your response was cut off. Output only the complete JSON object — no markdown, no explanation.',
+      });
+      continue;
     }
 
     return NextResponse.json({ error: 'Agent loop did not terminate' }, { status: 500 });
