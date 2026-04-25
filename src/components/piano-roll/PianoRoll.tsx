@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useComposition } from '../../hooks/useComposition';
 import { usePlayback } from '../../hooks/usePlayback';
 import { useNoteInteraction } from '../../hooks/useNoteInteraction';
@@ -72,20 +72,31 @@ export default function PianoRoll() {
   const resolution = toResolution(snapDiv);
   const tb = totalBeats(composition);
   const bpm = beatsPerMeasure(composition);
-  const ghostNotes = autocomplete.status === 'ready' && suggestion.status === 'idle' ? autocomplete.notes : [];
-  const maxGhostBeat = ghostNotes.reduce((max, n) => Math.max(max, n.startBeat + DURATION_BEATS[n.duration]), 0);
-  const displayTotalBeats = Math.max(tb, maxGhostBeat);
 
-  const ghostMeasureIndex = ghostNotes.length > 0 ? Math.floor(Math.min(...ghostNotes.map(n => n.startBeat)) / bpm) : -1;
-  const beatChords = computeBeatChordEntries(
-    activeComposition.voices,
-    ghostNotes,
-    ghostMeasureIndex,
-    displayTotalBeats,
-    bpm,
-    composition.keySignature,
+  const ghostNotes = useMemo(
+    () => autocomplete.status === 'ready' && suggestion.status === 'idle' ? autocomplete.notes : [],
+    [autocomplete, suggestion.status],
   );
-  const gridWidth = displayTotalBeats * cellW;
+  const displayTotalBeats = useMemo(
+    () => Math.max(tb, ghostNotes.reduce((max, n) => Math.max(max, n.startBeat + DURATION_BEATS[n.duration]), 0)),
+    [tb, ghostNotes],
+  );
+  const ghostMeasureIndex = useMemo(
+    () => ghostNotes.length > 0 ? Math.floor(Math.min(...ghostNotes.map(n => n.startBeat)) / bpm) : -1,
+    [ghostNotes, bpm],
+  );
+  const beatChords = useMemo(
+    () => computeBeatChordEntries(
+      activeComposition.voices,
+      ghostNotes,
+      ghostMeasureIndex,
+      displayTotalBeats,
+      bpm,
+      composition.keySignature,
+    ),
+    [activeComposition.voices, ghostNotes, ghostMeasureIndex, displayTotalBeats, bpm, composition.keySignature],
+  );
+  const gridWidth = useMemo(() => displayTotalBeats * cellW, [displayTotalBeats, cellW]);
   const gridHeight = NUM_WHITE_KEYS * WHITE_H;
 
   return (

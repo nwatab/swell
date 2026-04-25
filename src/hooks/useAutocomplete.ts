@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Composition } from '../types/song';
 import { beatsPerMeasure, DURATION_BEATS } from '../types/song';
 import type { AutocompleteState, AutocompleteNote } from '../types/ui-state';
@@ -19,6 +19,7 @@ export const useAutocomplete = (
   suggestionActive: boolean,
 ): UseAutocompleteReturn => {
   const [autocomplete, setAutocomplete] = useState<AutocompleteState>({ status: 'idle' });
+  const [fetchedFor, setFetchedFor] = useState<Composition | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const bpm = beatsPerMeasure(composition);
 
@@ -30,7 +31,6 @@ export const useAutocomplete = (
     controllerRef.current = controller;
 
     const timer = setTimeout(async () => {
-      setAutocomplete({ status: 'loading' });
       try {
         const res = await fetch('/api/autocomplete', {
           method: 'POST',
@@ -43,6 +43,7 @@ export const useAutocomplete = (
           setAutocomplete({ status: 'idle' });
           return;
         }
+        setFetchedFor(composition);
         setAutocomplete({ status: 'ready', notes: data.notes as AutocompleteNote[] });
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;
@@ -56,9 +57,18 @@ export const useAutocomplete = (
     };
   }, [composition, suggestionActive]);
 
+  // Notes fetched for a different composition are stale — suppress them immediately
+  // without calling setState in the effect body.
+  const effectiveAutocomplete = useMemo<AutocompleteState>(
+    () => autocomplete.status === 'ready' && fetchedFor === composition
+      ? autocomplete
+      : { status: 'idle' },
+    [autocomplete, fetchedFor, composition],
+  );
+
   const acceptAutocomplete = useCallback(() => {
-    if (autocomplete.status !== 'ready') return;
-    const { notes } = autocomplete;
+    if (effectiveAutocomplete.status !== 'ready') return;
+    const { notes } = effectiveAutocomplete;
 
     setComposition(comp => {
       const maxBeat = Math.max(...notes.map(n => n.startBeat + DURATION_BEATS[n.duration]));
@@ -74,7 +84,7 @@ export const useAutocomplete = (
       return updated;
     });
     setAutocomplete({ status: 'idle' });
-  }, [autocomplete, bpm, setComposition]);
+  }, [effectiveAutocomplete, bpm, setComposition]);
 
   const dismissAutocomplete = useCallback(() => {
     setAutocomplete({ status: 'idle' });
@@ -82,7 +92,7 @@ export const useAutocomplete = (
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (autocomplete.status !== 'ready') return;
+      if (effectiveAutocomplete.status !== 'ready') return;
       const tag = (document.activeElement as HTMLElement)?.tagName.toLowerCase();
       if (tag === 'input' || tag === 'textarea') return;
       if (e.key === 'Tab') {
@@ -94,7 +104,7 @@ export const useAutocomplete = (
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [autocomplete.status, acceptAutocomplete, dismissAutocomplete]);
+  }, [effectiveAutocomplete.status, acceptAutocomplete, dismissAutocomplete]);
 
-  return { autocomplete, acceptAutocomplete, dismissAutocomplete };
+  return { autocomplete: effectiveAutocomplete, acceptAutocomplete, dismissAutocomplete };
 };

@@ -38,7 +38,6 @@ export type AutocompleteNote = {
 
 export type AutocompleteState =
   | { status: 'idle' }
-  | { status: 'loading' }
   | { status: 'ready'; notes: AutocompleteNote[] };
 
 export type MusicGenState =
