@@ -25,6 +25,8 @@ export type DragState = {
   previewBeat: number;
   previewSpelledPitch: SpelledPitch;  // for rendering the drag preview
   hasMoved: boolean;
+  chordId?: string;    // set when dragging an entire chord as a unit
+  pitchDelta?: number; // semitone shift from originalMidi (chord drag only)
 };
 
 export type AutocompleteNote = {

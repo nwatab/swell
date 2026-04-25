@@ -2,7 +2,7 @@
 
 import type { Note, Composition } from '../../types/song';
 import { VOICE_COLORS } from '../../types/song';
-import { spelledPitchToMidi } from '../../lib/harmony';
+import { spelledPitchToMidi, spellMidi, keyAtBeat } from '../../lib/harmony';
 import type { SuggestionState, DragState, AutocompleteNote, Selection } from '../../types/ui-state';
 import { MIN_PITCH, MAX_PITCH } from './layout';
 import NoteBlock, { type NoteVariant } from './NoteBlock';
@@ -58,18 +58,41 @@ export default function NoteLayer({ composition, activeComposition, suggestion, 
   });
 
   const displayNotes: NoteEntry[] = drag?.hasMoved
-    ? [
-        ...baseNotes.filter(({ note }) => note.id !== drag.noteId),
-        {
-          note: {
-            ...composition.voices.flatMap(v => v.notes).find(n => n.id === drag.noteId)!,
-            startBeat: drag.previewBeat,
-            spelledPitch: drag.previewSpelledPitch,
+    ? drag.chordId !== undefined
+      ? (() => {
+          const key = keyAtBeat(composition, drag.previewBeat);
+          const beatDelta = drag.previewBeat - drag.originalBeat;
+          const pitchDelta = drag.pitchDelta ?? 0;
+          const isChordNote = (note: Note) =>
+            note.binding?.kind === 'chord_tone' && note.binding.chordId === drag.chordId;
+          return [
+            ...baseNotes.filter(({ note }) => !isChordNote(note)),
+            ...baseNotes
+              .filter(({ note }) => isChordNote(note))
+              .map(({ note, color }) => ({
+                note: {
+                  ...note,
+                  startBeat: note.startBeat + beatDelta,
+                  spelledPitch: spellMidi(spelledPitchToMidi(note.spelledPitch) + pitchDelta, key),
+                },
+                variant: 'dragging' as const,
+                color,
+              })),
+            ...ghostEntries,
+          ];
+        })()
+      : [
+          ...baseNotes.filter(({ note }) => note.id !== drag.noteId),
+          {
+            note: {
+              ...composition.voices.flatMap(v => v.notes).find(n => n.id === drag.noteId)!,
+              startBeat: drag.previewBeat,
+              spelledPitch: drag.previewSpelledPitch,
+            },
+            variant: 'dragging' as const,
           },
-          variant: 'dragging' as const,
-        },
-        ...ghostEntries,
-      ]
+          ...ghostEntries,
+        ]
     : [...baseNotes, ...ghostEntries];
 
   // Derive voice color for suggestion diff notes

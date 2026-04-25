@@ -2,15 +2,23 @@
 
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import type { RefObject } from 'react';
-import type { Composition, NoteDuration } from '../types/song';
-import { DURATION_BEATS, totalBeats } from '../types/song';
+import type { Composition } from '../types/song';
+import { totalBeats } from '../types/song';
 import type { SuggestionState, DragState, Selection, EditMode } from '../types/ui-state';
 import type { ChordType } from '../lib/music/chord';
 import { CHORD_INTERVALS } from '../lib/music/chord';
-import { snapBeat, snapBeatFloor, toResolution } from '../lib/snap';
+import { snapBeatFloor, toResolution } from '../lib/snap';
 import type { SnapDiv } from '../lib/snap';
-import { addNote, removeNote, removeChord, moveNote, spreadChordAcrossVoices } from '../lib/music/note-operations';
-import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi, spelledPitchToMidi } from '../lib/harmony';
+import { addNote, removeNote, removeChord, spreadChordAcrossVoices } from '../lib/music/note-operations';
+import {
+  hitNote,
+  computeDragStart,
+  computeDragUpdate,
+  applyDrag,
+  resolveClickSelection,
+  resolutionToDuration,
+} from '../lib/music/interaction';
+import { keyAtBeat, getDiatonicChordIntervals, snapToDiatonic, spellMidi } from '../lib/harmony';
 import { yToPitch } from '../components/piano-roll/layout';
 
 export interface UseNoteInteractionReturn {
@@ -31,13 +39,6 @@ export interface UseNoteInteractionOptions {
   setComposition: React.Dispatch<React.SetStateAction<Composition>>;
   gridRef: RefObject<HTMLDivElement | null>;
 }
-
-const resolutionToDuration = (resolution: number): NoteDuration => {
-  if (resolution >= 4) return 'whole';
-  if (resolution >= 2) return 'half';
-  if (resolution >= 1) return 'quarter';
-  return 'eighth';
-};
 
 export const useNoteInteraction = ({
   composition,
@@ -79,11 +80,9 @@ export const useNoteInteraction = ({
       const midi = yToPitch(e.clientY - rect.top);
       if (midi === null) return;
       const s = compositionRef.current;
-      const res = resolutionRef.current;
-      const newBeat = Math.max(0, Math.min(totalBeats(s) - 1, snapBeat(rawBeat - d.beatOffset, res)));
-      const key = keyAtBeat(s, newBeat);
-      const hasMoved = newBeat !== d.originalBeat || midi !== d.originalMidi;
-      const next = { ...d, previewBeat: newBeat, previewSpelledPitch: spellMidi(midi, key), hasMoved };
+      const maxBeat = totalBeats(s) - 1;
+      const key = keyAtBeat(s, 0);
+      const next = computeDragUpdate(d, rawBeat, midi, maxBeat, resolutionRef.current, key);
       dragRef.current = next;
       setDrag(next);
     };
@@ -92,22 +91,10 @@ export const useNoteInteraction = ({
       const d = dragRef.current;
       if (!d) return;
       if (d.hasMoved) {
-        setComposition(s => moveNote(s, d.noteId, d.previewBeat, d.previewSpelledPitch));
+        setComposition(s => applyDrag(d, s));
         setSelection(null);
       } else if (editModeRef.current === 'select') {
-        const note = compositionRef.current.voices.flatMap(v => v.notes).find(n => n.id === d.noteId);
-        const binding = note?.binding;
-        const cur = selectionRef.current;
-        if (binding?.kind === 'chord_tone') {
-          const alreadySelected =
-            (cur?.kind === 'chord' && cur.chordId === binding.chordId) ||
-            (cur?.kind === 'note' && cur.noteId === d.noteId);
-          if (!alreadySelected) setSelection({ kind: 'chord', chordId: binding.chordId });
-        } else if (note) {
-          if (!(cur?.kind === 'note' && cur.noteId === note.id)) {
-            setSelection({ kind: 'note', noteId: note.id });
-          }
-        }
+        setSelection(resolveClickSelection(d.noteId, compositionRef.current, selectionRef.current));
       }
       setDrag(null);
     };
@@ -149,29 +136,12 @@ export const useNoteInteraction = ({
       const resolution = toResolution(snapDiv);
       if (midi === null || rawBeat < 0 || rawBeat >= totalBeats(composition)) return;
 
-      const allNotes = composition.voices.flatMap(v =>
-        v.notes.map(n => ({ note: n, voiceId: v.id }))
-      );
-      const hit = allNotes.find(({ note: n }) => {
-        const noteMidi = spelledPitchToMidi(n.spelledPitch);
-        return noteMidi === midi &&
-          rawBeat >= n.startBeat &&
-          rawBeat < n.startBeat + DURATION_BEATS[n.duration];
-      });
+      const hit = hitNote(composition, rawBeat, midi);
 
       if (hit) {
-        const { note } = hit;
         // ダブルクリックの2回目 mousedown では drag を開始しない（dblclick で処理）
-        if (e.detail >= 2 && note.binding?.kind === 'chord_tone') return;
-        setDrag({
-          noteId: note.id,
-          originalBeat: note.startBeat,
-          originalMidi: spelledPitchToMidi(note.spelledPitch),
-          beatOffset: rawBeat - note.startBeat,
-          previewBeat: note.startBeat,
-          previewSpelledPitch: note.spelledPitch,
-          hasMoved: false,
-        });
+        if (e.detail >= 2 && hit.binding?.kind === 'chord_tone') return;
+        setDrag(computeDragStart(hit, selectionRef.current, editMode, rawBeat));
       } else {
         setSelection(null);
         if (editMode === 'select') return;
@@ -211,13 +181,7 @@ export const useNoteInteraction = ({
       const midi = yToPitch(e.clientY - rect.top);
       if (midi === null || rawBeat < 0 || rawBeat >= totalBeats(composition)) return;
 
-      const hit = composition.voices.flatMap(v => v.notes).find(n => {
-        const noteMidi = spelledPitchToMidi(n.spelledPitch);
-        return noteMidi === midi &&
-          rawBeat >= n.startBeat &&
-          rawBeat < n.startBeat + DURATION_BEATS[n.duration];
-      });
-
+      const hit = hitNote(composition, rawBeat, midi);
       if (hit?.binding?.kind === 'chord_tone') {
         setSelection({ kind: 'note', noteId: hit.id });
       }
